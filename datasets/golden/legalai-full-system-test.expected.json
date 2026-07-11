@@ -1,0 +1,267 @@
+{
+  "id": "legalai-full-system-test",
+  "labelVersion": "golden-v0.1",
+  "document": {
+    "document_class": "contract",
+    "language": "mixed",
+    "contract_type_any": [
+      "master services agreement",
+      "bosh xizmatlar ko'rsatish shartnomasi",
+      "commercial services agreement"
+    ],
+    "counterparty_terms": [
+      "Nova LegalTech"
+    ],
+    "value_terms": [
+      "1,250,000,000",
+      "UZS"
+    ],
+    "date_terms": [
+      "2026-08-01",
+      "2027-07-31"
+    ],
+    "law_terms": [
+      "England",
+      "Wales"
+    ]
+  },
+  "minimums": {
+    "fields": 10,
+    "risks": 7,
+    "obligations": 7,
+    "review_queue": 5,
+    "alerts": 5,
+    "page_citation_rate": 0.75
+  },
+  "requiredFields": [
+    {
+      "id": "total-contract-value",
+      "terms": ["1,250,000,000", "UZS"],
+      "page": 2,
+      "weight": 3
+    },
+    {
+      "id": "ai-usage-cap",
+      "terms": ["98,500", "USD"],
+      "page": 2,
+      "weight": 2
+    },
+    {
+      "id": "effective-date",
+      "terms": ["2026-08-01"],
+      "page": 1,
+      "weight": 2
+    },
+    {
+      "id": "initial-term-end",
+      "terms": ["2027-07-31"],
+      "page": 1,
+      "weight": 2
+    },
+    {
+      "id": "governing-language-priority",
+      "terms": ["Uzbek", "Russian", "English"],
+      "page": 1,
+      "weight": 1
+    },
+    {
+      "id": "late-payment-penalty",
+      "terms": ["0.15", "10 percent"],
+      "page": 2,
+      "weight": 2
+    },
+    {
+      "id": "auto-renewal-notice",
+      "terms": ["60", "2027-07-31"],
+      "page": 3,
+      "weight": 3
+    },
+    {
+      "id": "pilot-termination",
+      "terms": ["2026-08-30"],
+      "page": 3,
+      "weight": 2
+    }
+  ],
+  "requiredRisks": [
+    {
+      "id": "service-credit-conflict",
+      "terms": ["service credit", "5", "15"],
+      "severity": "medium",
+      "page": 2,
+      "weight": 3
+    },
+    {
+      "id": "ocr-date-ambiguity",
+      "terms": ["2O26-09-l5", "OCR", "ambiguous"],
+      "severity": "medium",
+      "page": 3,
+      "weight": 2
+    },
+    {
+      "id": "auto-renewal",
+      "terms": ["auto", "renewal", "60"],
+      "severity": "high",
+      "page": 3,
+      "weight": 3
+    },
+    {
+      "id": "overdue-iso-certificate",
+      "terms": ["ISO", "2026-07-01", "undelivered"],
+      "severity": "high",
+      "page": 3,
+      "weight": 3
+    },
+    {
+      "id": "unilateral-price-change",
+      "terms": ["price", "30 days", "15 days"],
+      "severity": "high",
+      "page": 5,
+      "weight": 3
+    },
+    {
+      "id": "broad-indemnity",
+      "terms": ["indemnifies", "third-party claims"],
+      "severity": "high",
+      "page": 5,
+      "weight": 2
+    },
+    {
+      "id": "confidentiality-penalty",
+      "terms": ["250,000,000", "confidential"],
+      "severity": "high",
+      "page": 5,
+      "weight": 3
+    },
+    {
+      "id": "cross-border-data-transfer",
+      "terms": ["cross-border", "United States", "safeguards"],
+      "severity": "medium",
+      "page": 5,
+      "weight": 2
+    },
+    {
+      "id": "non-compete",
+      "terms": ["18 months", "hire", "engineers"],
+      "severity": "medium",
+      "page": 5,
+      "weight": 2
+    }
+  ],
+  "requiredObligations": [
+    {
+      "id": "advance-payment",
+      "terms": ["advance", "2026-07-20"],
+      "owner_role_any": ["Finance", "Management"],
+      "category": "Payment",
+      "page": 2,
+      "weight": 3
+    },
+    {
+      "id": "dpa-signature",
+      "terms": ["data processing addendum", "2026-08-05"],
+      "owner_role_any": ["Legal"],
+      "category": "Compliance",
+      "page": 3,
+      "weight": 3
+    },
+    {
+      "id": "security-questionnaire",
+      "terms": ["security questionnaire", "2026-08-15"],
+      "owner_role_any": ["Operations", "Legal", "Unassigned"],
+      "category": "Compliance",
+      "page": 3,
+      "weight": 2
+    },
+    {
+      "id": "incident-notice",
+      "terms": ["personal data breach", "24 hours"],
+      "owner_role_any": ["Legal", "Operations"],
+      "category": "Compliance",
+      "page": 4,
+      "weight": 3
+    },
+    {
+      "id": "audit-logs",
+      "terms": ["audit logs", "36 months", "three business days"],
+      "owner_role_any": ["Operations", "Legal"],
+      "category": "Reporting",
+      "page": 4,
+      "weight": 2
+    },
+    {
+      "id": "sample-contracts",
+      "terms": ["sample contracts", "2026-08-02"],
+      "owner_role_any": ["Operations", "Legal"],
+      "category": "Delivery",
+      "page": 4,
+      "weight": 2
+    },
+    {
+      "id": "low-confidence-review",
+      "terms": ["low-confidence", "two business days"],
+      "owner_role_any": ["Legal"],
+      "category": "Reporting",
+      "page": 4,
+      "weight": 2
+    }
+  ],
+  "requiredReviewQueue": [
+    {
+      "id": "conflicting-service-credit",
+      "terms": ["Xizmat krediti", "5", "15"],
+      "priority_any": ["medium", "high"],
+      "weight": 2
+    },
+    {
+      "id": "ambiguous-ocr-date",
+      "terms": ["Noaniq sana", "OCR"],
+      "priority_any": ["low", "medium", "high"],
+      "weight": 2
+    },
+    {
+      "id": "auto-renewal-review",
+      "terms": ["auto-renewal"],
+      "priority_any": ["high"],
+      "weight": 2
+    },
+    {
+      "id": "overdue-iso-review",
+      "terms": ["ISO", "Muddati"],
+      "priority_any": ["high"],
+      "weight": 2
+    }
+  ],
+  "requiredAlerts": [
+    {
+      "id": "advance-payment-alert",
+      "terms": ["Avans", "2026-07-20"],
+      "days_before_any": [14, 30, 60],
+      "weight": 2
+    },
+    {
+      "id": "dpa-alert",
+      "terms": ["DPA", "data processing", "2026-08-05"],
+      "days_before_any": [14, 30, 60],
+      "weight": 2
+    },
+    {
+      "id": "trial-termination-alert",
+      "terms": ["trial", "2026-08-30"],
+      "days_before_any": [14, 30, 60],
+      "weight": 2
+    },
+    {
+      "id": "non-renewal-alert",
+      "terms": ["non-renewal", "2027-06-01"],
+      "days_before_any": [30, 60],
+      "weight": 3
+    },
+    {
+      "id": "iso-overdue-alert",
+      "terms": ["ISO", "2026-07-01"],
+      "days_before_any": [0, 7, 14, 30],
+      "weight": 2
+    }
+  ]
+}

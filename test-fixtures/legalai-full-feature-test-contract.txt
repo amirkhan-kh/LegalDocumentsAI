@@ -1,0 +1,472 @@
+LEGALAI FULL FEATURE TEST CONTRACT
+Contract No: LAI-TEST-2026-07-06
+Document status: Synthetic legal QA document for LegalAI extraction testing.
+Reference date for alerts: 2026-07-06.
+
+IMPORTANT QA NOTE:
+This PDF is intentionally written like a real commercial legal document. It contains
+Uzbek, Russian, and English clauses, conflicting values, risk markers, obligations,
+deadlines, responsible persons, and search tokens. It is designed to test whether
+the LegalAI project extracts fields, risks, obligations, page references, confidence
+scores, review queue items, and 60-day alerts.
+
+PAGE 1 OF 12 - PARTIES, DOCUMENT TYPE, AND CORE METADATA
+
+1. PARTIES
+1.1 Buyurtmachi / Customer:
+    Tashkent Retail Systems LLC, STIR/TIN 305123456, registered at 12 Mustaqillik
+    Avenue, Tashkent, Uzbekistan. Authorized representative: Azizbek Rakhimov,
+    Chief Operating Officer, acting under Charter.
+
+1.2 Ijrochi / Provider:
+    Nova LegalTech Solutions Ltd., company number NL-884200, registered at
+    71 King William Street, London EC4N 7HR, United Kingdom. Authorized
+    representative: Emma Williams, Director, acting under Articles of Association.
+
+1.3 Contract owner and review assignees:
+    Legal owner: Dilshod Karimov, Legal Counsel, legal@trs.example.
+    Finance owner: Malika Akbarova, Finance Manager, finance@trs.example.
+    IT security owner: Sardor Toirov, CISO, security@trs.example.
+    Vendor manager: Aziza Nazarova, Procurement Lead, procurement@trs.example.
+
+2. DOCUMENT CLASSIFICATION
+2.1 This document is a Master Services Agreement for AI-assisted legal document
+    processing, document understanding, contract analytics, review queue management,
+    obligation tracking, and alerting.
+
+2.2 Language priority:
+    The Uzbek main body prevails over Russian and English attachments unless a
+    clause expressly says otherwise. Search token: LANG-PRIORITY-UZ-RU-EN.
+
+3. EFFECTIVE DATE AND TERM
+3.1 Effective date: 2026-08-01.
+3.2 Initial term: from 2026-08-01 until 2027-07-31.
+3.3 Document execution deadline: both parties must sign by 2026-07-25.
+3.4 If the agreement is not signed by 2026-07-25, the commercial offer expires
+    automatically without compensation.
+
+=== PAGE BREAK ===
+PAGE 2 OF 12 - FINANCIAL TERMS AND PAYMENT CONDITIONS
+
+4. CONTRACT VALUE
+4.1 Total contract value is UZS 1,250,000,000 including VAT for the initial term.
+    Search token: FINANCE-TOTAL-UZS-1250000000.
+
+4.2 The hard annual cap for all paid AI usage is USD 98,500. Any usage above this
+    cap requires written approval from the Finance owner.
+
+4.3 Currency conversion:
+    Amounts denominated in USD are converted into UZS using the Central Bank of
+    Uzbekistan exchange rate on the invoice date.
+
+5. PAYMENT SCHEDULE
+5.1 Advance payment: 20 percent of the total contract value must be paid by
+    2026-07-20, within five banking days after the provider issues a valid invoice.
+    Search token: ALERT-60-DAY-ADVANCE-PAYMENT.
+
+5.2 Milestone 1 payment: 30 percent after sandbox delivery and UAT sign-off,
+    target date 2026-08-15.
+
+5.3 Milestone 2 payment: 30 percent after production launch, target date
+    2026-09-15.
+
+5.4 Final payment: 20 percent after acceptance of the first monthly compliance
+    report, target date 2026-10-05.
+
+6. PENALTIES AND INTEREST
+6.1 Late payment penalty: 0.15 percent of overdue amount per calendar day,
+    capped at 10 percent of the overdue amount.
+
+6.2 Service credit conflict for low-confidence review:
+    Clause 6.2(a) says the service credit for critical outage is 5 percent of the
+    monthly fee. English Attachment C says the service credit is 15 percent of the
+    monthly fee. The parties have not reconciled this conflict.
+    Search token: CONFLICT-SERVICE-CREDIT-5-VS-15.
+
+7. TAXES
+7.1 The provider is responsible for its corporate taxes. The customer is responsible
+    for withholding tax only if required by applicable Uzbek law.
+
+=== PAGE BREAK ===
+PAGE 3 OF 12 - DEADLINES, RENEWAL, TERMINATION, AND ALERTS
+
+8. DELIVERY TIMELINE
+8.1 Kickoff meeting: 2026-08-03.
+8.2 Data processing addendum must be signed by 2026-08-05.
+    Search token: ALERT-60-DAY-DPA-SIGNATURE.
+
+8.3 Security questionnaire and audit evidence must be delivered by 2026-08-15.
+    Responsible person: Sardor Toirov. Search token: SECURITY-AUDIT-2026-08-15.
+
+8.4 Production launch target: 2026-09-15.
+8.5 First quarterly business review: 2026-11-10.
+
+9. ACCEPTANCE PROCEDURE
+9.1 The customer must review each deliverable within seven business days after
+    delivery. Silence after seven business days is deemed acceptance unless the
+    customer sends a written defect notice.
+
+9.2 Ambiguous OCR-style date for review:
+    The provider's handwritten onboarding checklist states "go-live no later than
+    2O26-09-l5", where the characters O and l may be confused with zero and one.
+    Search token: LOW-CONFIDENCE-OCR-DATE.
+
+10. AUTO-RENEWAL AND TERMINATION WINDOW
+10.1 This agreement automatically renews for twelve months unless either party
+     gives written non-renewal notice at least 60 days before 2027-07-31.
+     Search token: RISK-AUTO-RENEWAL-60.
+
+10.2 Operational termination window:
+     The customer should open renewal review on 2027-05-01. The final non-renewal
+     notice must be sent no later than 2027-06-01.
+
+10.3 Trial termination:
+     The customer may terminate the pilot module without penalty if written notice
+     is sent by 2026-08-30. Search token: ALERT-60-DAY-TRIAL-END.
+
+11. OVERDUE ITEM FOR ALERT TESTING
+11.1 The provider's ISO 27001 certificate was due on 2026-07-01 and remains
+     undelivered as of the reference date 2026-07-06.
+     Search token: OVERDUE-ISO-CERTIFICATE.
+
+=== PAGE BREAK ===
+PAGE 4 OF 12 - OBLIGATIONS AND RESPONSIBLE PERSONS
+
+12. PROVIDER OBLIGATIONS
+12.1 The provider must maintain 99.5 percent monthly uptime for production services.
+     Monthly uptime reports are due by the fifth calendar day of each month.
+     Responsible person: Emma Williams.
+
+12.2 The provider must notify the customer of any confirmed personal data breach
+     within 24 hours after discovery. Search token: INCIDENT-24H-NOTICE.
+
+12.3 The provider must keep audit logs for 36 months and provide them within three
+     business days after a reasonable written request.
+
+12.4 The provider must support Uzbek, Russian, and English documents, including
+     scanned PDFs when document understanding or OCR is technically available.
+
+12.5 The provider must not train public foundation models on customer documents
+     unless the customer gives explicit written approval.
+
+13. CUSTOMER OBLIGATIONS
+13.1 The customer must provide initial sample contracts by 2026-08-02.
+     Responsible person: Aziza Nazarova.
+
+13.2 The customer must pay the advance invoice by 2026-07-20.
+     Responsible person: Malika Akbarova.
+
+13.3 The customer must review low-confidence extracted fields within two business
+     days after the AI review queue marks an item as "needs human review".
+     Responsible person: Dilshod Karimov.
+
+13.4 The customer must not upload malware, password-protected archives, or files
+     that are not PDF documents into the legal analysis portal.
+
+14. ASSIGNMENT TEST
+14.1 Obligations under clauses 12.1, 12.2, 12.3, 13.1, 13.2, and 13.3 must be
+     converted into task queue items with due date, responsible person, source page,
+     and confidence score.
+
+=== PAGE BREAK ===
+PAGE 5 OF 12 - RISK CLAUSES FOR LEGAL REVIEW
+
+15. HIGH-RISK CLAUSES
+15.1 Unilateral price change:
+     The provider may increase AI usage prices on 30 days' notice if upstream model
+     pricing changes. The customer may terminate affected services within 15 days
+     after receiving the price-change notice.
+     Search token: RISK-UNILATERAL-PRICE-CHANGE.
+
+15.2 Broad indemnity:
+     The customer indemnifies the provider against all third-party claims arising
+     from customer data, except to the extent caused by the provider's gross
+     negligence or willful misconduct. Search token: RISK-BROAD-INDEMNITY.
+
+15.3 Liability cap:
+     The provider's aggregate liability is capped at fees paid in the three months
+     before the claim. The cap does not apply to confidentiality breach, data breach,
+     intellectual property infringement, fraud, or intentional misconduct.
+
+15.4 Confidentiality penalty:
+     Unauthorized disclosure of confidential information triggers a contractual
+     penalty of UZS 250,000,000 per event, without limiting proven damages.
+     Search token: RISK-HIGH-CONFIDENTIALITY-PENALTY.
+
+15.5 Cross-border data transfer:
+     Customer personal data may be processed in Uzbekistan, the European Union, the
+     United Kingdom, and the United States if appropriate safeguards are in place.
+     Search token: CROSS-BORDER-DPA-24H.
+
+15.6 Audit cost risk:
+     If an audit discovers a material breach, the breaching party must reimburse
+     all reasonable audit costs within ten business days.
+
+15.7 Non-compete risk:
+     For 18 months after termination, the customer may not hire the provider's
+     implementation engineers who worked on the project without written consent.
+
+16. REVIEW QUEUE TRIGGERS
+16.1 Clauses 6.2, 9.2, 10.1, 11.1, 15.1, 15.2, 15.4, 15.5, and 15.7 must be sent
+     to legal review because they are conflicting, ambiguous, overdue, or high risk.
+
+=== PAGE BREAK ===
+PAGE 6 OF 12 - RUSSIAN LANGUAGE CLAUSES
+
+17. РУССКОЯЗЫЧНЫЕ УСЛОВИЯ
+17.1 Стороны подтверждают, что данный договор регулирует обработку юридических
+     документов, автоматическое извлечение обязательств, сроков, финансовых
+     условий и риск-факторов из PDF-файлов.
+
+17.2 Если Заказчик просрочит оплату более чем на 15 календарных дней, Исполнитель
+     вправе приостановить доступ к сервису после письменного уведомления за
+     5 рабочих дней. Search token: RU-SUSPENSION-15-DAYS.
+
+17.3 Исполнитель не вправе передавать персональные данные третьим лицам без
+     договора обработки данных, кроме случаев, прямо разрешенных применимым
+     законодательством.
+
+17.4 Одностороннее изменение существенных условий договора не допускается, за
+     исключением изменения цены по пункту 15.1.
+     Search token: RU-UNILATERAL-CHANGE-EXCEPTION.
+
+17.5 Спорное значение для проверки уверенности:
+     В русском приложении указана стоимость 1,150,000,000 сум без НДС, но пункт
+     4.1 основного текста указывает 1,250,000,000 сум с НДС. Основной текст имеет
+     приоритет, но различие должно попасть в очередь проверки.
+     Search token: CONFLICT-RU-PRICE-1150-VS-UZ-1250.
+
+17.6 Уведомления направляются на адреса legal@trs.example и notices@novalegal.example.
+     Уведомление считается полученным на следующий рабочий день после отправки.
+
+=== PAGE BREAK ===
+PAGE 7 OF 12 - ENGLISH LANGUAGE CLAUSES
+
+18. ENGLISH LEGAL CLAUSES
+18.1 Governing law:
+     This agreement is governed by the laws of England and Wales, except for
+     mandatory data protection and consumer protection rules of Uzbekistan.
+     Search token: EN-GOVERNING-LAW-ENGLAND-WALES.
+
+18.2 Dispute resolution:
+     Any dispute not resolved by executive escalation within 20 business days shall
+     be finally settled by arbitration seated in London, in English, by one
+     arbitrator. Search token: RISK-LONDON-ARBITRATION.
+
+18.3 Data breach:
+     The provider must notify the customer within 24 hours after becoming aware of
+     a confirmed personal data breach and must provide remediation status every
+     48 hours until closure.
+
+18.4 Assignment:
+     The provider may assign this agreement to an affiliate without customer consent
+     if the affiliate assumes all obligations in writing. Search token:
+     RISK-AFFILIATE-ASSIGNMENT-WITHOUT-CONSENT.
+
+18.5 AI model terms:
+     The provider may use paid enterprise AI models only. Free consumer model
+     accounts, shared public accounts, and unapproved default memory stores are
+     prohibited for customer documents.
+
+18.6 Search test values:
+     Counterparty search: Nova LegalTech Solutions Ltd.
+     Financial search: UZS 1,250,000,000 and USD 98,500.
+     Date search: 2026-08-15 and 2026-08-30.
+     Risk search: automatic renewal, broad indemnity, London arbitration.
+     Obligation search: incident notice within 24 hours, monthly uptime report.
+
+=== PAGE BREAK ===
+PAGE 8 OF 12 - NON-BINDING QA APPENDIX AND EXPECTED EXTRACTION CHECKLIST
+
+19. NON-BINDING QA APPENDIX
+19.1 This appendix is not a contract clause and should not create obligations. It
+     explains what the LegalAI system should detect when this PDF is uploaded.
+
+19.2 Expected document class:
+     Master Services Agreement / AI legal document processing agreement.
+
+19.3 Expected high-confidence fields:
+     Contract number: LAI-TEST-2026-07-06.
+     Customer: Tashkent Retail Systems LLC.
+     Provider: Nova LegalTech Solutions Ltd.
+     Effective date: 2026-08-01.
+     Initial end date: 2027-07-31.
+     Total value: UZS 1,250,000,000 including VAT.
+     Usage cap: USD 98,500.
+
+19.4 Expected review queue items:
+     Conflicting service credit 5 percent vs 15 percent.
+     Ambiguous OCR-style date 2O26-09-l5.
+     Conflicting Russian price 1,150,000,000 vs Uzbek price 1,250,000,000.
+     Overdue ISO certificate dated 2026-07-01.
+     Auto-renewal and 60-day non-renewal requirement.
+     Broad indemnity, high confidentiality penalty, cross-border processing,
+     non-compete, unilateral price change, and London arbitration.
+
+19.5 Expected 60-day or overdue alerts from reference date 2026-07-06:
+     2026-07-01 ISO certificate overdue.
+     2026-07-20 advance payment due.
+     2026-07-25 signing deadline.
+     2026-08-02 customer sample contracts due.
+     2026-08-05 data processing addendum due.
+     2026-08-15 security audit evidence due.
+     2026-08-30 pilot termination notice deadline.
+
+19.6 Expected obligation task owners:
+     Malika Akbarova for finance/payment items.
+     Sardor Toirov for security questionnaire and audit evidence.
+     Dilshod Karimov for low-confidence legal review.
+     Aziza Nazarova for sample contract delivery and vendor coordination.
+     Emma Williams for provider uptime, incident notice, and audit log duties.
+
+=== PAGE BREAK ===
+PAGE 9 OF 12 - SIDEBAR ROUTE AND UI POPULATION TEST CLAUSES
+
+21. WORKSPACE POPULATION REQUIREMENTS
+21.1 After this PDF is analyzed and saved to the registry, the application should
+     populate the following sidebar modules with non-empty data:
+     Boshqaruv, AI tahlil, Shartnomalar, Majburiyatlar, Vazifalar, Shablonlar,
+     Analytics, Staff Lab, and Kotib tahlili.
+
+21.2 Route test tokens:
+     ROUTE-DASHBOARD-KPI should be searchable after save.
+     ROUTE-AI-TAHLIL-UPLOAD verifies the upload and analysis page.
+     ROUTE-SHARTNOMALAR-REGISTRY verifies contract registry navigation.
+     ROUTE-MAJBURIYATLAR-QUEUE verifies obligation list navigation.
+     ROUTE-VAZIFALAR-KANBAN verifies task kanban navigation.
+     ROUTE-TAQQOSLASH-DIFF verifies comparison workflow.
+     ROUTE-SHABLONLAR-FIELDS verifies generated template fields.
+     ROUTE-ANALYTICS-WORKLOAD verifies analytics charts.
+     ROUTE-STAFF-LAB-PROPOSAL verifies staff proposal staging.
+     ROUTE-KOTIB-TAHLILI-SCOPE verifies product analysis page.
+
+21.3 The following legal duties are intentionally near the reference date
+     2026-07-06 so that dashboard counters and task queues should not remain zero:
+     Finance approval of advance invoice by 2026-07-20.
+     Legal execution readiness check by 2026-07-22.
+     Management budget cap approval by 2026-07-23.
+     Operations kickoff pack by 2026-08-03.
+     Security evidence review by 2026-08-15.
+
+21.4 If the system shows "Vazifa yo'q" after saving this document, task generation
+     from obligations or risk findings is incomplete. Search token:
+     QA-NO-EMPTY-TASKS-AFTER-SAVE.
+
+21.5 If the dashboard still shows zero active obligations after saving this
+     document, obligation persistence is incomplete. Search token:
+     QA-NO-ZERO-OBLIGATIONS-AFTER-SAVE.
+
+=== PAGE BREAK ===
+PAGE 10 OF 12 - TEMPLATE FIELD LIBRARY AND DATA MODEL TEST
+
+22. TEMPLATE FIELD SOURCE CLAUSES
+22.1 The following fields are contract template candidates and should be represented
+     as reusable placeholders if the application auto-generates a staging template:
+     counterparty_name = Nova LegalTech Solutions Ltd.
+     customer_name = Tashkent Retail Systems LLC.
+     contract_number = LAI-TEST-2026-07-06.
+     total_contract_value = UZS 1,250,000,000.
+     usage_cap_usd = USD 98,500.
+     effective_date = 2026-08-01.
+     end_date = 2027-07-31.
+     non_renewal_deadline = 2027-06-01.
+     advance_payment_due = 2026-07-20.
+     breach_notice_hours = 24.
+     uptime_target = 99.5 percent.
+     audit_log_retention_months = 36.
+     service_credit_conflict = 5 percent vs 15 percent.
+     data_regions = Uzbekistan, EU, UK, United States.
+     Search token: TEMPLATE-FIELD-LIBRARY-COMPLETE.
+
+22.2 The template generated from this document should be staging first, not global,
+     until Staff Lab approves it. Search token: TEMPLATE-STAGING-NOT-GLOBAL.
+
+22.3 Placeholder examples:
+     {{counterparty_name}}, {{total_contract_value}}, {{effective_date}},
+     {{non_renewal_deadline}}, {{breach_notice_hours}}, {{uptime_target}}.
+
+23. ANALYTICS DATA TEST
+23.1 Risk analytics should include high risks from unilateral price change, broad
+     indemnity, London arbitration, affiliate assignment without consent, and high
+     confidentiality penalty.
+
+23.2 Workload analytics should include tasks for Legal, Finance, Operations,
+     Management, and Security-related owners.
+
+23.3 Status analytics should include active obligations immediately after saving,
+     and completed obligations after the tester marks any row as completed.
+
+=== PAGE BREAK ===
+PAGE 11 OF 12 - STAFF LAB, AUTHORING, AND GOVERNANCE TEST
+
+24. STAFF LAB AUTHORING TRIGGERS
+24.1 Because this contract contains AI document processing, multilingual legal
+     extraction, scanned PDF support, field library placeholders, and review
+     guardrails, the system may propose a new domain configuration:
+     "AI Legal Document Processing Agreement".
+
+24.2 The Staff Lab proposal should include:
+     domain kind = AI legal processing;
+     template kind = master services agreement;
+     checklist = parties, value, payment, term, renewal, termination, risks,
+     obligations, source page, confidence, review queue, alerts;
+     default language handling = Uzbek, Russian, English;
+     guardrail = do not use free consumer model accounts or default memory stores.
+     Search token: STAFF-LAB-AUTHORING-PROPOSAL.
+
+24.3 Approval workflow:
+     Draft proposal -> Testing -> Approved -> Promoted.
+     A discarded proposal should remain auditable and not change global templates.
+     Search token: STAFF-LAB-TEST-APPROVE-PROMOTE.
+
+25. ACCESSIBILITY AND PERFORMANCE QA
+25.1 Every critical action should be reachable by keyboard:
+     route navigation, upload, analysis start, save, owner select, complete,
+     create task, archive, compare, template create, field add, staff upload.
+
+25.2 The interface should not overlap text on narrow screens. Long values such as
+     "CONFLICT-SERVICE-CREDIT-5-VS-15" and "RISK-AFFILIATE-ASSIGNMENT-WITHOUT-CONSENT"
+     should wrap or truncate professionally.
+
+25.3 Search token: ACCESSIBILITY-KEYBOARD-FOCUS-VISIBLE.
+25.4 Search token: PERFORMANCE-NO-UNNECESSARY-REFRESH-STATE-LOSS.
+
+=== PAGE BREAK ===
+PAGE 12 OF 12 - MANUAL COMPARISON INPUTS AND FINAL ACCEPTANCE CHECKLIST
+
+26. MANUAL COMPARISON TEXT
+26.1 Copy this reference text into the Taqqoslash reference field:
+     Payment must be made within 30 calendar days. Renewal requires a separate
+     written agreement. Governing law is the Republic of Uzbekistan.
+
+26.2 Copy this candidate text into the Taqqoslash candidate field:
+     Payment may be made within 45 calendar days. The agreement will auto renew
+     unless notice is sent 60 days before expiry. Governing law is English law.
+
+26.3 Expected comparison output:
+     payment term difference = medium risk;
+     auto renewal = high risk;
+     English law = high risk.
+     Search token: COMPARISON-MANUAL-TEST-45-AUTO-ENGLISH-LAW.
+
+27. FINAL ACCEPTANCE CHECKLIST
+27.1 AI tahlil page should show analysis result, model name, seconds, language,
+     fields, risks, obligations, alerts, and save button.
+27.2 Shartnomalar page should show this contract in the registry.
+27.3 Majburiyatlar page should show active obligations with owner and due date.
+27.4 Vazifalar page should show kanban cards created from obligations and risks.
+27.5 Shablonlar page should show a staging template with extracted fields.
+27.6 Analytics page should show non-zero risk/status/workload bars.
+27.7 Staff Lab page should show a testing proposal after saving this PDF.
+27.8 Global search should find Nova LegalTech, UZS 1,250,000,000, auto-renewal,
+     OVERDUE-ISO-CERTIFICATE, TEMPLATE-FIELD-LIBRARY-COMPLETE, and
+     STAFF-LAB-AUTHORING-PROPOSAL.
+27.9 Direct URLs should work:
+     /dashboard, /ai-tahlil, /shartnomalar, /majburiyatlar, /vazifalar,
+     /taqqoslash, /shablonlar, /analytics, /staff-lab, /kotib-tahlili.
+
+28. SIGNATURES
+For Customer: ___________________________  Date: 2026-07-25
+For Provider: ___________________________  Date: 2026-07-25
+
+END OF LEGALAI FULL FEATURE TEST CONTRACT

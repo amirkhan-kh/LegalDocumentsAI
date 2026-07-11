@@ -1,0 +1,13 @@
+{
+  "version": "golden-v0.1",
+  "description": "LegalAI ML/LLM evaluation cases. Each case points to a PDF and a curated expected extraction spec.",
+  "cases": [
+    {
+      "id": "legalai-full-system-test",
+      "title": "Mixed Uzbek/Russian/English commercial agreement with obligations, risks and alerts",
+      "pdfPath": "/Users/amirxon/Desktop/LegalAI_Full_System_Test_Contract.pdf",
+      "expectedPath": "datasets/golden/legalai-full-system-test.expected.json",
+      "tags": ["mixed-language", "commercial", "obligations", "risk-review", "alerts"]
+    }
+  ]
+}
