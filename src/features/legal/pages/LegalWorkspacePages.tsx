@@ -37,9 +37,13 @@ import {
   Upload,
   Users,
 } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type * as React from "react";
+import { useI18n } from "../../../app/i18n";
 import { Badge, Bar, EmptyState, KeyValue, MetricCard, PageIntro, Panel } from "../../../components/ui";
-import { analyzeLegalPdf, requestErrorMessage } from "../api";
+import { analyzeLegalPdf, readActiveAnalysisJobId, requestErrorMessage, resumeLegalAnalysisJob } from "../api";
+import type { AnalysisJob } from "../api";
+import { MAX_PDF_BYTES } from "../constants";
 import { daysUntil, employees, fmtDate, makeId, riskLabel, statusLabel } from "../domain";
 import type {
   AnalysisRun,
@@ -59,6 +63,50 @@ import type {
   TemplateWorkspaceState,
 } from "../types";
 
+function useViewportPanelHeight(panelSlotRef: React.RefObject<HTMLDivElement | null>, cssProperty: string) {
+  useLayoutEffect(() => {
+    const panelSlot = panelSlotRef.current;
+    if (!panelSlot) return;
+
+    let animationFrame = 0;
+    const syncPanelHeight = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        const visualViewport = window.visualViewport;
+        const viewportHeight = visualViewport?.height ?? window.innerHeight;
+        const panelDocumentTop = panelSlot.getBoundingClientRect().top + window.scrollY;
+        const availableHeight = Math.max(120, Math.floor(viewportHeight - panelDocumentTop - 20));
+        panelSlot.style.setProperty(cssProperty, `${availableHeight}px`);
+      });
+    };
+
+    syncPanelHeight();
+    window.addEventListener("resize", syncPanelHeight);
+    window.addEventListener("orientationchange", syncPanelHeight);
+    window.visualViewport?.addEventListener("resize", syncPanelHeight);
+    const layoutRoot = panelSlot.closest(".main");
+    const layoutResizeObserver = new ResizeObserver(syncPanelHeight);
+    const layoutMutationObserver = new MutationObserver(syncPanelHeight);
+    const intro = panelSlot.parentElement?.querySelector(":scope > .wide");
+    const precedingPanel = panelSlot.previousElementSibling;
+    const topbar = layoutRoot?.querySelector(":scope > .topbar");
+    if (intro) layoutResizeObserver.observe(intro);
+    if (precedingPanel) layoutResizeObserver.observe(precedingPanel);
+    if (topbar) layoutResizeObserver.observe(topbar);
+    if (layoutRoot) layoutMutationObserver.observe(layoutRoot, { childList: true });
+    void document.fonts?.ready.then(syncPanelHeight);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", syncPanelHeight);
+      window.removeEventListener("orientationchange", syncPanelHeight);
+      window.visualViewport?.removeEventListener("resize", syncPanelHeight);
+      layoutResizeObserver.disconnect();
+      layoutMutationObserver.disconnect();
+    };
+  }, [cssProperty, panelSlotRef]);
+}
+
 export function Dashboard({ metrics, contracts, obligations, tasks, onOpenContract }: {
   metrics: { contracts: number; activeObligations: number; overdue: number; avgScore: number; highRisks: number };
   contracts: Contract[];
@@ -66,6 +114,7 @@ export function Dashboard({ metrics, contracts, obligations, tasks, onOpenContra
   tasks: Task[];
   onOpenContract: (id: string) => void;
 }) {
+  const { language, t } = useI18n();
   const upcoming = [...obligations].filter((item) => item.status !== "archived" && item.status !== "completed").sort((a, b) => daysUntil(a.dueDate) - daysUntil(b.dueDate)).slice(0, 5);
   const flagged = contracts.flatMap((contract) => contract.risks.map((risk) => ({ contract, risk }))).sort((a, b) => (b.risk.severity === "high" ? 1 : 0) - (a.risk.severity === "high" ? 1 : 0)).slice(0, 4);
   const counterparties = Array.from(new Set(contracts.map((contract) => contract.counterparty).filter(Boolean))).slice(0, 5);
@@ -92,11 +141,11 @@ export function Dashboard({ metrics, contracts, obligations, tasks, onOpenContra
         <Panel title="Deadline va AI prioritet" subtitle="Kechikkan va yaqin sanalar birinchi ko'rinadi" icon={CalendarClock}>
           <div className="stack-list">
             {upcoming.length ? upcoming.map((item) => (
-              <button className="row-button" key={item.id} onClick={() => onOpenContract(item.contractId)}>
+              <button type="button" className="row-button" key={item.id} onClick={() => onOpenContract(item.contractId)}>
                 <span className={`status-dot ${item.status}`} />
                 <span className="row-main">
                   <strong>{item.title}</strong>
-                  <small>{item.owner} · {fmtDate(item.dueDate)} · {daysUntil(item.dueDate)} kun</small>
+                  <small>{item.owner} · {fmtDate(item.dueDate, language)} · {daysUntil(item.dueDate)} {t("kun")}</small>
                 </span>
                 <Badge tone={item.status === "overdue" ? "danger" : "info"}>{statusLabel(item.status)}</Badge>
               </button>
@@ -106,7 +155,7 @@ export function Dashboard({ metrics, contracts, obligations, tasks, onOpenContra
         <Panel title="AI risklar" subtitle="Portfeldagi eng muhim topilmalar" icon={TriangleAlert}>
           <div className="risk-list">
             {flagged.length ? flagged.map(({ contract, risk }) => (
-              <button className="risk-item" key={risk.id} onClick={() => onOpenContract(contract.id)}>
+              <button type="button" className="risk-item" key={risk.id} onClick={() => onOpenContract(contract.id)}>
                 <div>
                   <Badge tone={risk.severity === "high" ? "danger" : "warning"}>{riskLabel(risk.severity)}</Badge>
                   <h3>{risk.title}</h3>
@@ -135,7 +184,7 @@ export function Dashboard({ metrics, contracts, obligations, tasks, onOpenContra
             {["Yuklash", "Tasnif", "Ajratish", "Ko'rik", "Xabar"].map((item, index) => (
               <div className="pipeline-step" key={item}>
                 <span>{index + 1}</span>
-                <strong>{item}</strong>
+                <strong>{t(item)}</strong>
               </div>
             ))}
           </div>
@@ -161,9 +210,40 @@ export function ReviewWorkspace({ state, setState, onSave, recentContracts }: {
   onSave: (run: AnalysisRun) => void;
   recentContracts: Contract[];
 }) {
-  const { selectedFile, run, progressStage, isAnalyzing, error } = state;
+  const { t } = useI18n();
+  const { selectedFile, run, progressStage, analysisProgress, analysisMessage, analysisChunks, isAnalyzing, error } = state;
   const selectedFileIsPdf = !selectedFile || selectedFile.type === "application/pdf" || /\.pdf$/i.test(selectedFile.name);
+  const selectedFileIsWithinLimit = !selectedFile || selectedFile.size <= MAX_PDF_BYTES;
+  const resultPanelSlotRef = useRef<HTMLDivElement>(null);
   const patchState = (patch: Partial<ReviewWorkspaceState>) => setState((current) => ({ ...current, ...patch }));
+  useViewportPanelHeight(resultPanelSlotRef, "--review-result-height");
+
+  const syncJobProgress = (job: AnalysisJob) => {
+    patchState({
+      analysisJobId: job.id,
+      progressStage: jobToWorkspaceStage(job),
+      analysisProgress: job.progress.percent,
+      analysisMessage: job.progress.message,
+      analysisChunks: { completed: job.progress.completedChunks, total: job.progress.totalChunks },
+      isAnalyzing: job.status === "queued" || job.status === "running",
+    });
+  };
+
+  useEffect(() => {
+    const activeJobId = readActiveAnalysisJobId();
+    if (!activeJobId || state.run || state.isAnalyzing) return;
+    patchState({
+      analysisJobId: activeJobId,
+      isAnalyzing: true,
+      progressStage: "uploaded",
+      analysisProgress: 0,
+      analysisMessage: "Background tahlil holati tiklanmoqda",
+      error: "",
+    });
+    void resumeLegalAnalysisJob(activeJobId, { onProgress: syncJobProgress })
+      .then((analysisRun) => patchState({ run: analysisRun, progressStage: "done", analysisProgress: 100, analysisMessage: "Tahlil yakunlandi", isAnalyzing: false }))
+      .catch((requestError) => patchState({ error: requestErrorMessage(requestError), progressStage: null, isAnalyzing: false }));
+  }, []);
 
   const startRun = async () => {
     if (!selectedFile) {
@@ -174,18 +254,26 @@ export function ReviewWorkspace({ state, setState, onSave, recentContracts }: {
       patchState({ error: "Faqat PDF qabul qilinadi. DOC/DOCX yoki matn maydoni ishlatilmaydi." });
       return;
     }
-    patchState({ error: "", run: null, isAnalyzing: true, progressStage: "uploaded" });
-    const timers = [
-      window.setTimeout(() => patchState({ progressStage: "classifying" }), 800),
-      window.setTimeout(() => patchState({ progressStage: "extracting" }), 2200),
-    ];
+    if (selectedFile.size > MAX_PDF_BYTES) {
+      patchState({ error: "PDF fayl 50MB dan oshmasligi kerak." });
+      return;
+    }
+    patchState({
+      error: "",
+      run: null,
+      isAnalyzing: true,
+      progressStage: "uploaded",
+      analysisJobId: null,
+      analysisProgress: 0,
+      analysisMessage: "PDF serverga yuborilmoqda",
+      analysisChunks: { completed: 0, total: null },
+    });
     try {
-      const analysisRun = await analyzeLegalPdf(selectedFile);
-      patchState({ run: analysisRun, progressStage: "done" });
+      const analysisRun = await analyzeLegalPdf(selectedFile, { onProgress: syncJobProgress });
+      patchState({ run: analysisRun, progressStage: "done", analysisProgress: 100, analysisMessage: "Tahlil yakunlandi" });
     } catch (requestError) {
       patchState({ error: requestErrorMessage(requestError), progressStage: null });
     } finally {
-      timers.forEach(window.clearTimeout);
       patchState({ isAnalyzing: false });
     }
   };
@@ -215,7 +303,7 @@ export function ReviewWorkspace({ state, setState, onSave, recentContracts }: {
       <Panel title="PDF yuklash" subtitle="Faqat PDF qabul qilinadi: text PDF, scanned PDF, Uzbek/Russian/English" icon={FileUp}>
         <div className="form-grid">
           <label className="wide">
-            PDF fayl
+            {t("PDF fayl")}
             <input
               type="file"
               accept="application/pdf,.pdf"
@@ -228,16 +316,18 @@ export function ReviewWorkspace({ state, setState, onSave, recentContracts }: {
                 patchState({
                   selectedFile: file,
                   run: null,
-                  error: file.type === "application/pdf" || /\.pdf$/i.test(file.name) ? "" : "Faqat PDF qabul qilinadi.",
+                  error: file.size > MAX_PDF_BYTES
+                    ? "PDF fayl 50MB dan oshmasligi kerak."
+                    : file.type === "application/pdf" || /\.pdf$/i.test(file.name) ? "" : "Faqat PDF qabul qilinadi.",
                 });
               }}
             />
           </label>
           <div className="wide upload-rules">
-            <div><CheckCircle2 size={16} /> PDF-only, 50MB gacha</div>
-            <div><CheckCircle2 size={16} /> Skan PDF ham Vertex document understanding orqali o'qiladi</div>
-            <div><CheckCircle2 size={16} /> O'zbek lotin/kiril, rus va ingliz tillari qo'llanadi</div>
-            <div><CheckCircle2 size={16} /> Maydon, risk, majburiyat, page citation va confidence qaytadi</div>
+            <div><CheckCircle2 size={16} /> {t("PDF-only, 50MB gacha")}</div>
+            <div><CheckCircle2 size={16} /> {t("Skan PDF ham Vertex document understanding orqali o'qiladi")}</div>
+            <div><CheckCircle2 size={16} /> {t("O'zbek lotin/kiril, rus va ingliz tillari qo'llanadi")}</div>
+            <div><CheckCircle2 size={16} /> {t("Maydon, risk, majburiyat, page citation va confidence qaytadi")}</div>
           </div>
           {selectedFile && (
             <div className="wide selected-file">
@@ -246,42 +336,52 @@ export function ReviewWorkspace({ state, setState, onSave, recentContracts }: {
               <Badge tone="info">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</Badge>
             </div>
           )}
-          {error && <div className="wide error-box">{error}</div>}
-          <button className="primary-button wide" disabled={isAnalyzing || !selectedFile || !selectedFileIsPdf} onClick={startRun}>
-            <Sparkles size={17} /> {isAnalyzing ? "Vertex AI tahlil qilmoqda..." : "PDF tahlilni boshlash"}
+          {error && <div className="wide error-box">{t(error)}</div>}
+          <button type="button" className="primary-button wide" disabled={isAnalyzing || !selectedFile || !selectedFileIsPdf || !selectedFileIsWithinLimit} onClick={startRun}>
+            <Sparkles size={17} /> {t(isAnalyzing ? "Vertex AI tahlil qilmoqda..." : "PDF tahlilni boshlash")}
           </button>
         </div>
       </Panel>
-      <Panel title="Tahlil natijasi" subtitle="Klassifikatsiya, maydonlar, risklar va majburiyatlar" icon={Brain}>
+      <div className="review-result-slot" ref={resultPanelSlotRef} role="region" aria-label={t("Tahlil natijasi")} aria-busy={isAnalyzing}>
+        <Panel title="Tahlil natijasi" subtitle="Klassifikatsiya, maydonlar, risklar va majburiyatlar" icon={Brain}>
         {!run ? (
           error ? (
-            <div className="analysis-result">
-              <div className="error-box">{error}</div>
+            <div className="analysis-result" tabIndex={0} aria-label={t("Tahlil natijasi")}>
+              <div className="error-box">{t(error)}</div>
               <EmptyState icon={TriangleAlert} title="Tahlil boshlanmadi" text="Server/model sozlamasi yoki PDF formatini tekshiring. Muammo tuzatilgandan keyin qayta boshlang." />
             </div>
           ) :
           progressStage ? (
-            <div className="analysis-result">
+            <div className="analysis-result" tabIndex={0} aria-label={t("Tahlil jarayoni")}>
               <div className="stage-row">
                 {["uploaded", "classifying", "extracting", "done"].map((stage, index) => (
                   <div key={stage} className={`stage ${stageIndex(progressStage) >= index ? "complete" : ""}`}>
                     <span>{index + 1}</span>
-                    <strong>{["PDF yuklandi", "Til/type aniqlash", "Maydon/risk chiqarish", "Tayyor"][index]}</strong>
+                    <strong>{t(["PDF yuklandi", "Til/type aniqlash", "Maydon/risk chiqarish", "Tayyor"][index])}</strong>
                   </div>
                 ))}
               </div>
-              <EmptyState icon={Brain} title="Vertex AI PDFni o'qiyapti" text="Skan yoki ko'p sahifali hujjatlarda bu 40 soniya yoki undan ko'proq vaqt olishi mumkin." />
+              <div className="analysis-live-progress" aria-live="polite">
+                <div>
+                  <strong>{t(analysisMessage || "Gemini Pro PDFni o'qiyapti")}</strong>
+                  <span>{analysisProgress}%{analysisChunks.total ? ` · ${analysisChunks.completed}/${analysisChunks.total} chunk` : ""}</span>
+                </div>
+                <div className="mini-progress"><i style={{ width: `${analysisProgress}%` }} /></div>
+                <p>{t("Katta hujjatlar sahifa bo'laklarida parallel tahlil qilinadi. 60 soniya soft target; ish background rejimida xavfsiz davom etadi.")}</p>
+              </div>
             </div>
           ) : (
-            <EmptyState icon={Upload} title="PDF tanlanmagan" text="PDF yuklang. Tahlil natijasida kontragent, moliyaviy shartlar, muddatlar, risklar va majburiyatlar chiqadi." />
+            <div className="analysis-result" tabIndex={0} aria-label={t("Tahlil natijasi")}>
+              <EmptyState icon={Upload} title="PDF tanlanmagan" text="PDF yuklang. Tahlil natijasida kontragent, moliyaviy shartlar, muddatlar, risklar va majburiyatlar chiqadi." />
+            </div>
           )
         ) : (
-          <div className="analysis-result">
+          <div className="analysis-result" tabIndex={0} aria-label={t("Tahlil natijasi")}>
             <div className="stage-row">
               {["uploaded", "classifying", "extracting", "done"].map((stage, index) => (
                 <div key={stage} className={`stage ${stageIndex(run.stage) >= index ? "complete" : ""}`}>
                   <span>{index + 1}</span>
-                  <strong>{["Yuklandi", "Tasnif", "Ajratish", "Tayyor"][index]}</strong>
+                  <strong>{t(["Yuklandi", "Tasnif", "Ajratish", "Tayyor"][index])}</strong>
                 </div>
               ))}
             </div>
@@ -304,8 +404,8 @@ export function ReviewWorkspace({ state, setState, onSave, recentContracts }: {
             </div>
             {run.summary && (
               <div className="summary-box">
-                <strong>AI xulosa</strong>
-                <p>{run.summary.short || "Xulosa mavjud emas."}</p>
+                <strong>{t("AI xulosa")}</strong>
+                <p>{run.summary.short || t("Xulosa mavjud emas.")}</p>
                 {run.summary.what_to_check_first.length > 0 && (
                   <ul>
                     {run.summary.what_to_check_first.map((item) => <li key={item}>{item}</li>)}
@@ -316,7 +416,7 @@ export function ReviewWorkspace({ state, setState, onSave, recentContracts }: {
             {run.contract.risks.length > 0 && (
               <div className="risk-list">
                 {run.contract.risks.map((risk) => (
-                  <div className="risk-item" key={risk.id}>
+                  <div className="risk-card" key={risk.id}>
                     <div>
                       <Badge tone={risk.severity === "high" ? "danger" : risk.severity === "medium" ? "warning" : "success"}>{riskLabel(risk.severity)}</Badge>
                       <h3>{risk.title}</h3>
@@ -328,7 +428,7 @@ export function ReviewWorkspace({ state, setState, onSave, recentContracts }: {
               </div>
             )}
             <div className="obligation-review">
-              <h3>Majburiyatlar review</h3>
+              <h3>{t("Majburiyatlar review")}</h3>
               {run.obligations.map((item) => (
                 <div className="obligation-card" key={item.id}>
                   <label className="checkline">
@@ -338,7 +438,7 @@ export function ReviewWorkspace({ state, setState, onSave, recentContracts }: {
                       <small>{item.source} · {item.confidence}%</small>
                     </span>
                   </label>
-                  <select value={item.owner} onChange={(event) => updateRunObligation(item.id, { owner: event.target.value })}>
+                  <select value={item.owner} onChange={(event) => updateRunObligation(item.id, { owner: event.target.value })} aria-label={`${item.title}: ${t("Mas'ul")}`}>
                     {employees.map((employee) => <option key={employee}>{employee}</option>)}
                   </select>
                 </div>
@@ -346,7 +446,7 @@ export function ReviewWorkspace({ state, setState, onSave, recentContracts }: {
             </div>
             {run.alerts && run.alerts.length > 0 && (
               <div className="alert-list">
-                <h3>Kuzatuv va xabarnoma qoidalari</h3>
+                <h3>{t("Kuzatuv va xabarnoma qoidalari")}</h3>
                 {run.alerts.map((alert) => (
                   <div className="alert-card" key={`${alert.title}-${alert.source}`}>
                     <Bell size={16} />
@@ -359,12 +459,13 @@ export function ReviewWorkspace({ state, setState, onSave, recentContracts }: {
               </div>
             )}
             <div className="button-row">
-              <button className="secondary-button" disabled={isAnalyzing || !selectedFile} onClick={startRun}><RefreshCw size={16} /> PDFni qayta tahlil</button>
-              <button className="primary-button" disabled={run.stage !== "done"} onClick={() => onSave(run)}><Save size={16} /> Reyestrga saqlash</button>
+              <button type="button" className="secondary-button" disabled={isAnalyzing || !selectedFile} onClick={startRun}><RefreshCw size={16} /> {t("PDFni qayta tahlil")}</button>
+              <button type="button" className="primary-button" disabled={run.stage !== "done"} onClick={() => onSave(run)}><Save size={16} /> {t("Reyestrga saqlash")}</button>
             </div>
           </div>
         )}
-      </Panel>
+        </Panel>
+      </div>
       <Panel title="Review navbati" subtitle="Oxirgi tahlil qilingan hujjatlar" icon={ClipboardList}>
         <div className="stack-list">
           {recentContracts.length ? recentContracts.map((contract) => (
@@ -392,8 +493,24 @@ export function ContractsWorkspace({ contracts, obligations, selected, query, on
   onSelect: (id: string) => void;
   onReextract: (contract: Contract) => void;
 }) {
+  const { language, t } = useI18n();
   const filtered = contracts.filter((contract) => `${contract.title} ${contract.counterparty} ${contract.type}`.toLowerCase().includes(query.toLowerCase()));
   const selectedObligations = selected ? obligations.filter((item) => item.contractId === selected.id && item.status !== "archived") : [];
+  const contractDetailSlotRef = useRef<HTMLDivElement>(null);
+  useViewportPanelHeight(contractDetailSlotRef, "--contract-detail-height");
+  const exportSelectedContract = () => {
+    if (!selected) return;
+    const fileName = `${selected.id.replace(/[^a-z0-9_-]/gi, "-")}-legalai.json`;
+    const content = JSON.stringify({ contract: selected, obligations: selectedObligations, exportedAt: new Date().toISOString() }, null, 2);
+    const objectUrl = URL.createObjectURL(new Blob([content], { type: "application/json" }));
+    const downloadLink = document.createElement("a");
+    downloadLink.href = objectUrl;
+    downloadLink.download = fileName;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    URL.revokeObjectURL(objectUrl);
+  };
   return (
     <section className="workspace-grid contracts-grid">
       <div className="wide">
@@ -412,7 +529,7 @@ export function ContractsWorkspace({ contracts, obligations, selected, query, on
       <Panel title="Shartnoma reyestri" subtitle="Ichki va AI tahlil qilingan hujjatlar" icon={FileText}>
         <label className="inline-search">
           <Search size={16} />
-          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Qidirish" aria-label="Shartnomalar ichidan qidirish" />
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t("Qidirish")} aria-label={t("Shartnomalar ichidan qidirish")} />
         </label>
         <div className="contract-list">
           {filtered.length ? filtered.map((contract) => (
@@ -426,47 +543,53 @@ export function ContractsWorkspace({ contracts, obligations, selected, query, on
           )) : <EmptyState icon={FileText} title="Shartnoma yo'q" text="PDF tahlil qilib saqlangandan keyin reyestr shu yerda ko'rinadi." />}
         </div>
       </Panel>
-      <Panel title={selected?.title ?? "Shartnoma tanlanmagan"} subtitle={selected ? `${selected.id} · ${selected.fileName}` : "PDF tahlil natijasini saqlang"} icon={Eye}>
-        {selected ? (
-          <>
-            <div className="detail-toolbar">
-              <Badge tone={selected.status === "review" ? "warning" : "success"}>{statusLabel(selected.status)}</Badge>
-              <Badge tone="neutral">{selected.language.toUpperCase()}</Badge>
-              <button type="button" className="secondary-button" onClick={() => onReextract(selected)}><RefreshCw size={16} /> Qayta tahlil qilish</button>
-              <button type="button" className="secondary-button"><Download size={16} /> Natijani eksport</button>
-            </div>
-            <div className="detail-grid">
-              <KeyValue label="Kontragent" value={selected.counterparty} />
-              <KeyValue label="Hujjat turi" value={selected.type} />
-              <KeyValue label="Qiymat" value={selected.value} />
-              <KeyValue label="Muddat" value={selected.term} />
-              <KeyValue label="Huquq" value={selected.law} />
-              <KeyValue label="AI score" value={`${selected.aiScore}%`} />
-            </div>
-            <div className="source-layout">
-              <div className="document-preview">
-                <div className="paper">
-                  <h3>{selected.title}</h3>
-                  <p>Kontragent: {selected.counterparty}</p>
-                  <p className="highlight">Vertex AI ajratgan maydonlar manba sahifa va confidence bilan bog'langan.</p>
-                  <p>Qiymat: {selected.value}</p>
-                  <p>Qo'llaniladigan huquq: {selected.law}</p>
+      <div className="contract-detail-slot" ref={contractDetailSlotRef} role="region" aria-label={selected?.title ?? t("Shartnoma tanlanmagan")}>
+        <Panel title={selected?.title ?? "Shartnoma tanlanmagan"} subtitle={selected ? `${selected.id} · ${selected.fileName}` : "PDF tahlil natijasini saqlang"} icon={Eye}>
+          {selected ? (
+            <div className="contract-detail-content" tabIndex={0} aria-label={selected.title}>
+              <div className="detail-toolbar">
+                <Badge tone={selected.status === "review" ? "warning" : "success"}>{statusLabel(selected.status)}</Badge>
+                <Badge tone="neutral">{selected.language.toUpperCase()}</Badge>
+                <button type="button" className="secondary-button" onClick={() => onReextract(selected)}><RefreshCw size={16} /> {t("Qayta tahlil qilish")}</button>
+                <button type="button" className="secondary-button" onClick={exportSelectedContract}><Download size={16} /> {t("Natijani eksport")}</button>
+              </div>
+              <div className="detail-grid">
+                <KeyValue label="Kontragent" value={selected.counterparty} />
+                <KeyValue label="Hujjat turi" value={selected.type} />
+                <KeyValue label="Qiymat" value={selected.value} />
+                <KeyValue label="Muddat" value={selected.term} />
+                <KeyValue label="Huquq" value={selected.law} />
+                <KeyValue label="AI score" value={`${selected.aiScore}%`} />
+              </div>
+              <div className="source-layout">
+                <div className="document-preview">
+                  <div className="paper">
+                    <h3>{selected.title}</h3>
+                    <p>{t("Kontragent")}: {selected.counterparty}</p>
+                    <p className="highlight">{t("Vertex AI ajratgan maydonlar manba sahifa va confidence bilan bog'langan.")}</p>
+                    <p>{t("Qiymat")}: {selected.value}</p>
+                    <p>{t("Qo'llaniladigan huquq")}: {selected.law}</p>
+                  </div>
+                </div>
+                <div className="side-stack">
+                  <h3>{t("Ajratilgan maydonlar")}</h3>
+                  {selected.fields.map((field) => (
+                    <div className="field-chip" key={field.label}>
+                      <span>{field.label}</span>
+                      <strong>{field.value}</strong>
+                      <small>{field.source} · {field.confidence}%{field.needsReview ? " · review" : ""}</small>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <div className="side-stack">
-                <h3>Ajratilgan maydonlar</h3>
-                {selected.fields.map((field) => (
-                  <div className="field-chip" key={field.label}>
-                    <span>{field.label}</span>
-                    <strong>{field.value}</strong>
-                    <small>{field.source} · {field.confidence}%{field.needsReview ? " · review" : ""}</small>
-                  </div>
-                ))}
-              </div>
             </div>
-          </>
-        ) : <EmptyState icon={FileSearch} title="Hali tahlil yo'q" text="AI tahlil bo'limida PDF yuklang va natijani reyestrga saqlang." />}
-      </Panel>
+          ) : (
+            <div className="contract-detail-content contract-detail-empty">
+              <EmptyState icon={FileSearch} title="Hali tahlil yo'q" text="AI tahlil bo'limida PDF yuklang va natijani reyestrga saqlang." />
+            </div>
+          )}
+        </Panel>
+      </div>
       <Panel title="Bog'langan majburiyatlar" subtitle="Saqlangan AI extraction natijalari" icon={ListChecks}>
         <div className="compact-list">
           {selectedObligations.length ? selectedObligations.map((item) => (
@@ -474,7 +597,7 @@ export function ContractsWorkspace({ contracts, obligations, selected, query, on
               <span className={`status-dot ${item.status}`} />
               <span>
                 <strong>{item.title}</strong>
-                <small>{item.owner} · {fmtDate(item.dueDate)} · {item.source}</small>
+                <small>{item.owner} · {fmtDate(item.dueDate, language)} · {item.source}</small>
               </span>
               <Badge tone={item.status === "overdue" ? "danger" : "info"}>{statusLabel(item.status)}</Badge>
             </div>
@@ -493,6 +616,7 @@ export function ObligationsWorkspace({ obligations, contracts, filter, onFilterC
   onUpdate: (id: string, patch: Partial<Obligation>) => void;
   onCreateTask: (obligation: Obligation) => void;
 }) {
+  const { language, t } = useI18n();
   const visible = obligations.filter((item) => filter === "all" || item.status === filter);
   return (
     <section className="section-grid">
@@ -509,7 +633,7 @@ export function ObligationsWorkspace({ obligations, contracts, filter, onFilterC
       />
       <div className="filter-bar">
         {["all", "active", "overdue", "review", "completed"].map((item) => (
-          <button type="button" key={item} className={filter === item ? "segmented active" : "segmented"} onClick={() => onFilterChange(item as ObligationStatus | "all")}>{item === "all" ? "Hammasi" : statusLabel(item as ObligationStatus)}</button>
+          <button type="button" key={item} className={filter === item ? "segmented active" : "segmented"} onClick={() => onFilterChange(item as ObligationStatus | "all")}>{t(item === "all" ? "Hammasi" : statusLabel(item as ObligationStatus))}</button>
         ))}
       </div>
       <div className="table-card">
@@ -517,12 +641,12 @@ export function ObligationsWorkspace({ obligations, contracts, filter, onFilterC
           <table>
             <thead>
               <tr>
-                <th>Majburiyat</th>
-                <th>Shartnoma</th>
-                <th>Mas'ul</th>
-                <th>Muddat</th>
-                <th>Holat</th>
-                <th><span className="sr-only">Amallar</span></th>
+                <th>{t("Majburiyat")}</th>
+                <th>{t("Shartnoma")}</th>
+                <th>{t("Mas'ul")}</th>
+                <th>{t("Muddat")}</th>
+                <th>{t("Holat")}</th>
+                <th><span className="sr-only">{t("Amallar")}</span></th>
               </tr>
             </thead>
             <tbody>
@@ -540,12 +664,12 @@ export function ObligationsWorkspace({ obligations, contracts, filter, onFilterC
                         {employees.map((employee) => <option key={employee}>{employee}</option>)}
                       </select>
                     </td>
-                    <td data-label="Muddat">{fmtDate(item.dueDate)}</td>
+                    <td data-label="Muddat">{fmtDate(item.dueDate, language)}</td>
                     <td data-label="Holat"><Badge tone={item.status === "overdue" ? "danger" : item.status === "completed" ? "success" : "info"}>{statusLabel(item.status)}</Badge></td>
                     <td className="actions-cell" data-label="Amallar">
-                      <button type="button" className="icon-button" title="Bajarildi" aria-label="Bajarildi" onClick={() => onUpdate(item.id, { status: "completed" })}><Check size={16} /></button>
-                      <button type="button" className="icon-button" title="Vazifa yaratish" aria-label="Vazifa yaratish" onClick={() => onCreateTask(item)}><Plus size={16} /></button>
-                      <button type="button" className="icon-button" title="Arxiv" aria-label="Arxiv" onClick={() => onUpdate(item.id, { status: "archived" })}><Archive size={16} /></button>
+                      <button type="button" className="icon-button" title={t("Bajarildi")} aria-label={t("Bajarildi")} onClick={() => onUpdate(item.id, { status: "completed" })}><Check size={16} /></button>
+                      <button type="button" className="icon-button" title={t("Vazifa yaratish")} aria-label={t("Vazifa yaratish")} onClick={() => onCreateTask(item)}><Plus size={16} /></button>
+                      <button type="button" className="icon-button" title={t("Arxiv")} aria-label={t("Arxiv")} onClick={() => onUpdate(item.id, { status: "archived" })}><Archive size={16} /></button>
                     </td>
                   </tr>
                 );
@@ -563,6 +687,7 @@ export function TasksWorkspace({ tasks, contracts, onUpdate }: {
   contracts: Contract[];
   onUpdate: (id: string, patch: Partial<Task>) => void;
 }) {
+  const { language, t } = useI18n();
   const columns: Array<{ id: TaskStatus; title: string }> = [
     { id: "pending", title: "Kutilmoqda" },
     { id: "progress", title: "Jarayonda" },
@@ -586,29 +711,34 @@ export function TasksWorkspace({ tasks, contracts, onUpdate }: {
       {columns.map((column) => (
         <div className="kanban-column" key={column.id}>
           <div className="kanban-head">
-            <h2>{column.title}</h2>
+            <h2>{t(column.title)}</h2>
             <Badge tone="neutral">{tasks.filter((task) => task.status === column.id).length}</Badge>
           </div>
-          {tasks.filter((task) => task.status === column.id).map((task) => {
+          {tasks.some((task) => task.status === column.id) ? tasks.filter((task) => task.status === column.id).map((task) => {
             const contract = contracts.find((item) => item.id === task.contractId);
             return (
               <div className="task-card" key={task.id}>
                 <div className="task-top">
                   <Badge tone={task.priority === "high" ? "danger" : task.priority === "medium" ? "warning" : "success"}>{riskLabel(task.priority)}</Badge>
-                  <small>{fmtDate(task.dueDate)}</small>
+                  <small>{fmtDate(task.dueDate, language)}</small>
                 </div>
                 <h3>{task.title}</h3>
                 <p>{contract?.counterparty ?? task.contractId}</p>
                 <div className="task-footer">
                   <span>{task.owner}</span>
                   <div className="button-row compact">
-                    {column.id !== "pending" && <button className="icon-button" onClick={() => onUpdate(task.id, { status: "pending" })}><ArrowRight className="rotate-180" size={15} /></button>}
-                    {column.id !== "done" && <button className="icon-button" onClick={() => onUpdate(task.id, { status: column.id === "pending" ? "progress" : "done" })}><ArrowRight size={15} /></button>}
+                    {column.id !== "pending" && <button type="button" className="icon-button" title={t("Oldingi bosqichga o'tkazish")} aria-label={`${task.title}: ${t("Oldingi bosqichga o'tkazish")}`} onClick={() => onUpdate(task.id, { status: "pending" })}><ArrowRight className="rotate-180" size={15} /></button>}
+                    {column.id !== "done" && <button type="button" className="icon-button" title={t("Keyingi bosqichga o'tkazish")} aria-label={`${task.title}: ${t("Keyingi bosqichga o'tkazish")}`} onClick={() => onUpdate(task.id, { status: column.id === "pending" ? "progress" : "done" })}><ArrowRight size={15} /></button>}
                   </div>
                 </div>
               </div>
             );
-          })}
+          }) : (
+            <div className="kanban-empty">
+              <FolderKanban size={21} />
+              <span>{t("Bu bosqichda vazifa yo'q")}</span>
+            </div>
+          )}
         </div>
       ))}
     </section>
@@ -619,6 +749,7 @@ export function ComparisonWorkspace({ state, setState }: {
   state: ComparisonWorkspaceState;
   setState: React.Dispatch<React.SetStateAction<ComparisonWorkspaceState>>;
 }) {
+  const { t } = useI18n();
   const { reference, candidate, items } = state;
   const patchState = (patch: Partial<ComparisonWorkspaceState>) => setState((current) => ({ ...current, ...patch }));
   const runCompare = () => {
@@ -670,15 +801,15 @@ export function ComparisonWorkspace({ state, setState }: {
       <Panel title="Ikki hujjatni taqqoslash" subtitle="Reference va candidate versiyalar orasidagi band farqlari" icon={FileDiff}>
         <div className="compare-inputs">
           <label>
-            Reference hujjat
-            <textarea rows={8} value={reference} onChange={(event) => patchState({ reference: event.target.value })} placeholder="Asosiy matn yoki fayl nomi..." />
+            {t("Reference hujjat")}
+            <textarea rows={8} value={reference} onChange={(event) => patchState({ reference: event.target.value })} placeholder={t("Asosiy matn yoki fayl nomi...")} />
           </label>
           <label>
-            Candidate hujjat
-            <textarea rows={8} value={candidate} onChange={(event) => patchState({ candidate: event.target.value })} placeholder="Yangi versiya matni: 45 days, auto renewal, English law..." />
+            {t("Candidate hujjat")}
+            <textarea rows={8} value={candidate} onChange={(event) => patchState({ candidate: event.target.value })} placeholder={t("Yangi versiya matni: 45 days, auto renewal, English law...")} />
           </label>
         </div>
-        <button type="button" className="primary-button" onClick={runCompare}><GitCompareArrows size={17} /> Taqqoslashni boshlash</button>
+        <button type="button" className="primary-button" onClick={runCompare} disabled={!reference.trim() || !candidate.trim()}><GitCompareArrows size={17} /> {t("Taqqoslashni boshlash")}</button>
       </Panel>
       <Panel title="Taqqoslash natijasi" subtitle="Risk darajasi, ta'sir va tekshiruv izohi" icon={GitCompareArrows}>
         {items.length ? (
@@ -710,9 +841,12 @@ export function TemplatesWorkspace({ templates, setTemplates, state, setState }:
   state: TemplateWorkspaceState;
   setState: React.Dispatch<React.SetStateAction<TemplateWorkspaceState>>;
 }) {
+  const { t } = useI18n();
+  const templateDetailSlotRef = useRef<HTMLDivElement>(null);
   const { selectedId, fieldName, templateName, domain } = state;
   const selected = templates.find((item) => item.id === selectedId) ?? templates[0];
   const patchState = (patch: Partial<TemplateWorkspaceState>) => setState((current) => ({ ...current, ...patch }));
+  useViewportPanelHeight(templateDetailSlotRef, "--template-detail-height");
 
   const createTemplate = () => {
     if (!templateName.trim()) return;
@@ -754,49 +888,51 @@ export function TemplatesWorkspace({ templates, setTemplates, state, setState }:
         />
       </div>
       <Panel title="Maydonlar kutubxonasi" subtitle="AI topgan dinamik maydonlar va qayta ishlatiladigan shablonlar" icon={Library}>
-        <div className="template-create">
-          <input value={templateName} onChange={(event) => patchState({ templateName: event.target.value })} placeholder="Yangi shablon nomi" aria-label="Yangi shablon nomi" />
-          <input value={domain} onChange={(event) => patchState({ domain: event.target.value })} placeholder="Domen" aria-label="Shablon domeni" />
-          <button type="button" className="secondary-button" onClick={createTemplate}><Plus size={16} /> Shablon yaratish</button>
-        </div>
+        <form className="template-create" onSubmit={(event) => { event.preventDefault(); createTemplate(); }}>
+          <input value={templateName} onChange={(event) => patchState({ templateName: event.target.value })} placeholder={t("Yangi shablon nomi")} aria-label={t("Yangi shablon nomi")} />
+          <input value={domain} onChange={(event) => patchState({ domain: event.target.value })} placeholder={t("Domen")} aria-label={t("Shablon domeni")} />
+          <button type="submit" className="secondary-button" disabled={!templateName.trim()}><Plus size={16} /> {t("Shablon yaratish")}</button>
+        </form>
         <div className="template-list">
           {templates.length ? templates.map((template) => (
-            <button type="button" className={selected?.id === template.id ? "template-row selected" : "template-row"} key={template.id} onClick={() => patchState({ selectedId: template.id })}>
+            <button type="button" className={selected?.id === template.id ? "template-row selected" : "template-row"} key={template.id} title={template.name} aria-pressed={selected?.id === template.id} onClick={() => patchState({ selectedId: template.id })}>
               <span>
                 <strong>{template.name}</strong>
-                <small>{template.domain} · {template.fields.length} maydon</small>
+                <small>{template.domain} · {template.fields.length} {t("maydon")}</small>
               </span>
               <Badge tone={template.status === "global" ? "success" : "warning"}>{template.status}</Badge>
             </button>
           )) : <EmptyState icon={Library} title="Shablon yo'q" text="Keyingi bosqichda AI extractiondan template yaratish ulanadi." />}
         </div>
       </Panel>
-      <Panel title={selected?.name ?? "Shablon"} subtitle="Maydonlarni joylashtirish va namuna render" icon={SquarePen}>
-        {selected ? (
-          <div className="template-detail">
-            <div className="button-row">
-              <input value={fieldName} onChange={(event) => patchState({ fieldName: event.target.value })} placeholder="Yangi maydon nomi" aria-label="Yangi maydon nomi" />
-              <button type="button" className="secondary-button" onClick={addField}><Plus size={16} /> Qo'shish</button>
+      <div className="template-detail-slot" ref={templateDetailSlotRef} role="region" aria-label={selected?.name ?? t("Shablon tanlanmagan")}>
+        <Panel title={selected?.name ?? "Shablon"} subtitle="Maydonlarni joylashtirish va namuna render" icon={SquarePen}>
+          {selected ? (
+            <div className="template-detail" tabIndex={0} aria-label={t("Shablon maydonlari va namuna hujjati")}>
+              <form className="button-row template-field-add" onSubmit={(event) => { event.preventDefault(); addField(); }}>
+                <input value={fieldName} onChange={(event) => patchState({ fieldName: event.target.value })} placeholder={t("Yangi maydon nomi")} aria-label={t("Yangi maydon nomi")} />
+                <button type="submit" className="secondary-button" disabled={!fieldName.trim()}><Plus size={16} /> {t("Qo'shish")}</button>
+              </form>
+              <div className="field-table">
+                {selected.fields.map((field) => (
+                  <div className="field-row" key={field.id}>
+                    <strong>{field.label}</strong>
+                    <code title={`{{${field.key}}}`}>{`{{${field.key}}}`}</code>
+                    <Badge tone="neutral">{field.type}</Badge>
+                    <span>{field.example}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="paper template-paper">
+                <h3>{selected.name}</h3>
+                <p>{t("Ushbu shartnoma")} {selected.fields[0] ? `{{${selected.fields[0].key}}}` : "{{party}}"} {t("va buyurtmachi o'rtasida tuziladi.")}</p>
+                <p>{t("Qiymat, muddat, mas'ul va SLA kabi maydonlar Field Library orqali hujjatga joylashtiriladi.")}</p>
+                <p className="highlight">{selected.fields.map((field) => `${field.label}: {{${field.key}}}`).join(" · ")}</p>
+              </div>
             </div>
-            <div className="field-table">
-              {selected.fields.map((field) => (
-                <div className="field-row" key={field.id}>
-                  <strong>{field.label}</strong>
-                  <code>{`{{${field.key}}}`}</code>
-                  <Badge tone="neutral">{field.type}</Badge>
-                  <span>{field.example}</span>
-                </div>
-              ))}
-            </div>
-            <div className="paper template-paper">
-              <h3>{selected.name}</h3>
-              <p>Ushbu shartnoma {selected.fields[0] ? `{{${selected.fields[0].key}}}` : "{{party}}"} va buyurtmachi o'rtasida tuziladi.</p>
-              <p>Qiymat, muddat, mas'ul va SLA kabi maydonlar Field Library orqali hujjatga joylashtiriladi.</p>
-              <p className="highlight">{selected.fields.map((field) => `${field.label}: {{${field.key}}}`).join(" · ")}</p>
-            </div>
-          </div>
-        ) : <EmptyState icon={SquarePen} title="Shablon tanlanmagan" text="Hozircha default shablon yuklanmaydi." />}
-      </Panel>
+          ) : <EmptyState icon={SquarePen} title="Shablon tanlanmagan" text="Hozircha default shablon yuklanmaydi." />}
+        </Panel>
+      </div>
     </section>
   );
 }
@@ -808,6 +944,7 @@ export function KnowledgeBaseWorkspace({ state, setState, onRefresh, onUpload, o
   onUpload: () => void;
   onDelete: (id: string) => void;
 }) {
+  const { language, t } = useI18n();
   const clientDocuments = state.documents.filter((document) => document.kind === "client");
   const systemDocuments = state.documents.filter((document) => document.kind === "system");
   const updateState = (patch: Partial<KnowledgeWorkspaceState>) => setState((current) => ({ ...current, ...patch }));
@@ -836,26 +973,26 @@ export function KnowledgeBaseWorkspace({ state, setState, onRefresh, onUpload, o
         <Panel title="Qo'llanma yuklash" subtitle="PDF, TXT, MD, CSV yoki JSON hujjatlarni AI bilim bazasiga qo'shing" icon={Upload}>
           <div className="form-grid">
             <label>
-              Nomi
-              <input value={state.title} onChange={(event) => updateState({ title: event.target.value })} placeholder="Masalan: Bitrix savdo pipeline qoidalari" />
+              {t("Nomi")}
+              <input value={state.title} onChange={(event) => updateState({ title: event.target.value })} placeholder={t("Masalan: Bitrix savdo pipeline qoidalari")} />
             </label>
             <label>
-              Yo'nalish
+              {t("Yo'nalish")}
               <select value={state.domain} onChange={(event) => updateState({ domain: event.target.value })}>
                 {["Legal", "Sales", "CRM", "Finance", "Operations", "Compliance", "HR", "Procurement", "Other"].map((item) => <option key={item}>{item}</option>)}
               </select>
             </label>
             <label>
-              Til
+              {t("Til")}
               <select value={state.language} onChange={(event) => updateState({ language: event.target.value })}>
-                <option value="mixed">Aralash</option>
-                <option value="uz">O'zbek</option>
+                <option value="mixed">{t("Aralash")}</option>
+                <option value="uz">{t("O'zbek")}</option>
                 <option value="ru">Русский</option>
                 <option value="en">English</option>
               </select>
             </label>
             <label>
-              Fayl
+              {t("Fayl")}
               <input
                 type="file"
                 accept="application/pdf,.pdf,.txt,.md,.markdown,.csv,.json"
@@ -869,19 +1006,19 @@ export function KnowledgeBaseWorkspace({ state, setState, onRefresh, onUpload, o
                 <Badge tone="info">{(state.selectedFile.size / (1024 * 1024)).toFixed(2)} MB</Badge>
               </div>
             )}
-            {state.error && <div className="wide error-box">{state.error}</div>}
+            {state.error && <div className="wide error-box">{t(state.error)}</div>}
             <div className="wide upload-rules">
-              <div><CheckCircle2 size={16} /> CRM script, Bitrix/amoCRM stage, approval matrix va risk playbooklar qabul qilinadi</div>
-              <div><CheckCircle2 size={16} /> Hujjat AI orqali grounding qoidalarga aylantiriladi</div>
-              <div><CheckCircle2 size={16} /> Keyingi PDF tahlilda shu biznes qoidalari RAG context sifatida ishlatiladi</div>
-              <div><CheckCircle2 size={16} /> System playbooklar o'chirilmaydi, client hujjatlar boshqariladi</div>
+              <div><CheckCircle2 size={16} /> {t("CRM script, Bitrix/amoCRM stage, approval matrix va risk playbooklar qabul qilinadi")}</div>
+              <div><CheckCircle2 size={16} /> {t("Hujjat AI orqali grounding qoidalarga aylantiriladi")}</div>
+              <div><CheckCircle2 size={16} /> {t("Keyingi PDF tahlilda shu biznes qoidalari RAG context sifatida ishlatiladi")}</div>
+              <div><CheckCircle2 size={16} /> {t("System playbooklar o'chirilmaydi, client hujjatlar boshqariladi")}</div>
             </div>
             <div className="wide action-row">
               <button type="button" className="secondary-button" onClick={onRefresh} disabled={state.isLoading}>
-                <RefreshCw size={16} /> Yangilash
+                <RefreshCw size={16} /> {t("Yangilash")}
               </button>
               <button type="button" className="primary-button" onClick={onUpload} disabled={!state.selectedFile || state.isUploading}>
-                <Sparkles size={16} /> {state.isUploading ? "AI o'qiyapti..." : "Bilim bazasiga qo'shish"}
+                <Sparkles size={16} /> {t(state.isUploading ? "AI o'qiyapti..." : "Bilim bazasiga qo'shish")}
               </button>
             </div>
           </div>
@@ -890,20 +1027,20 @@ export function KnowledgeBaseWorkspace({ state, setState, onRefresh, onUpload, o
         <Panel title="Ishlash prinsipi" subtitle="Bu qism har biznesni o'z qoidalariga moslaydi" icon={Brain}>
           <div className="principle-list">
             <div>
-              <strong>1. Hujjat ingest</strong>
-              <span>Client qo'llanma, CRM script yoki qonuniy checklist yuklaydi.</span>
+              <strong>{t("1. Hujjat ingest")}</strong>
+              <span>{t("Client qo'llanma, CRM script yoki qonuniy checklist yuklaydi.")}</span>
             </div>
             <div>
-              <strong>2. AI normalizatsiya</strong>
-              <span>Vertex hujjatni qaror qoidalari, threshold, stage va risk kriteriylariga ajratadi.</span>
+              <strong>{t("2. AI normalizatsiya")}</strong>
+              <span>{t("Vertex hujjatni qaror qoidalari, threshold, stage va risk kriteriylariga ajratadi.")}</span>
             </div>
             <div>
-              <strong>3. RAG grounding</strong>
-              <span>PDF tahlilda kerakli qoida promptga qo'shiladi; AI taxmin emas, manbaga tayanadi.</span>
+              <strong>{t("3. RAG grounding")}</strong>
+              <span>{t("PDF tahlilda kerakli qoida promptga qo'shiladi; AI taxmin emas, manbaga tayanadi.")}</span>
             </div>
             <div>
-              <strong>4. Evaluation</strong>
-              <span>Natija golden dataset bilan o'lchanadi, past joylar playbook/prompt orqali tuzatiladi.</span>
+              <strong>{t("4. Evaluation")}</strong>
+              <span>{t("Natija golden dataset bilan o'lchanadi, past joylar playbook/prompt orqali tuzatiladi.")}</span>
             </div>
           </div>
         </Panel>
@@ -929,9 +1066,9 @@ export function KnowledgeBaseWorkspace({ state, setState, onRefresh, onUpload, o
                   ) : null}
                 </div>
                 <div className="knowledge-actions">
-                  <small>{document.uploadedAt ? fmtDate(document.uploadedAt) : "System"}</small>
+                  <small>{document.uploadedAt ? fmtDate(document.uploadedAt, language) : "System"}</small>
                   {document.kind === "client" && (
-                    <button type="button" className="icon-button danger" onClick={() => onDelete(document.id)} title="O'chirish" aria-label={`${document.title} hujjatini o'chirish`}>
+                    <button type="button" className="icon-button danger" onClick={() => onDelete(document.id)} title={t("O'chirish")} aria-label={`${document.title}: ${t("O'chirish")}`}>
                       <Trash2 size={16} />
                     </button>
                   )}
@@ -973,6 +1110,7 @@ export function KnowledgeBaseWorkspace({ state, setState, onRefresh, onUpload, o
 }
 
 export function AnalyticsWorkspace({ contracts, obligations, tasks }: { contracts: Contract[]; obligations: Obligation[]; tasks: Task[] }) {
+  const { t } = useI18n();
   const riskCounts = {
     high: contracts.reduce((sum, contract) => sum + contract.risks.filter((risk) => risk.severity === "high").length, 0),
     medium: contracts.reduce((sum, contract) => sum + contract.risks.filter((risk) => risk.severity === "medium").length, 0),
@@ -1012,7 +1150,7 @@ export function AnalyticsWorkspace({ contracts, obligations, tasks }: { contract
           {workload.map((item) => (
             <div className="workload-card" key={item.employee}>
               <strong>{item.employee}</strong>
-              <span>{item.count} ochiq ish</span>
+              <span>{item.count} {t("ochiq ish")}</span>
               <div className="mini-progress"><i style={{ width: `${Math.min(100, item.count * 18)}%` }} /></div>
             </div>
           ))}
@@ -1027,6 +1165,7 @@ export function StaffWorkspace({ proposals, onAddProposal, onUpdate }: {
   onAddProposal: (files: FileList | null) => void;
   onUpdate: (id: string, status: ProposalStatus) => void;
 }) {
+  const { t } = useI18n();
   return (
     <section className="workspace-grid staff-grid">
       <div className="wide">
@@ -1045,21 +1184,21 @@ export function StaffWorkspace({ proposals, onAddProposal, onUpdate }: {
       <Panel title="AI sozlash" subtitle="Reference hujjatlardan domen, shablon va prompt takliflari tayyorlanadi" icon={FlaskConical}>
         <div className="prompt-grid">
           <div className="prompt-box">
-            <strong>Domen konteksti</strong>
-            <p>Domen bo'yicha umumiy kontekst: hujjat klassi, yuridik terminlar, til va extraction chegaralari.</p>
+            <strong>{t("Domen konteksti")}</strong>
+            <p>{t("Domen bo'yicha umumiy kontekst: hujjat klassi, yuridik terminlar, til va extraction chegaralari.")}</p>
           </div>
           <div className="prompt-box">
-            <strong>Tekshiruv ro'yxati</strong>
-            <p>Sub-type uchun aynan nimalarni ajratish: tomonlar, qiymat, muddat, risk, majburiyat, confidence va citation.</p>
+            <strong>{t("Tekshiruv ro'yxati")}</strong>
+            <p>{t("Sub-type uchun aynan nimalarni ajratish: tomonlar, qiymat, muddat, risk, majburiyat, confidence va citation.")}</p>
           </div>
           <div className="prompt-box">
-            <strong>Review qoidalari</strong>
-            <p>Past confidence, noaniq bandlar va policy limitlar inson ko'rigiga yuboriladi.</p>
+            <strong>{t("Review qoidalari")}</strong>
+            <p>{t("Past confidence, noaniq bandlar va policy limitlar inson ko'rigiga yuboriladi.")}</p>
           </div>
         </div>
         <label className="file-action">
           <Upload size={17} />
-          Reference hujjatlar yuklash
+          {t("Reference hujjatlar yuklash")}
           <input type="file" accept="application/pdf,.pdf" multiple onChange={(event) => onAddProposal(event.target.files)} />
         </label>
       </Panel>
@@ -1071,14 +1210,14 @@ export function StaffWorkspace({ proposals, onAddProposal, onUpdate }: {
                 <Badge tone={proposal.kind === "domain" ? "info" : "neutral"}>{proposal.kind}</Badge>
                 <h3>{proposal.title}</h3>
                 <p>{proposal.summary}</p>
-                <small>Confidence: {proposal.confidence}%</small>
+                <small>{t("Confidence")}: {proposal.confidence}%</small>
               </div>
               <div className="proposal-actions">
                 <Badge tone={proposal.status === "promoted" ? "success" : proposal.status === "discarded" ? "danger" : "warning"}>{statusLabel(proposal.status)}</Badge>
-                <button type="button" className="secondary-button" onClick={() => onUpdate(proposal.id, "testing")}>Sinash</button>
-                <button type="button" className="secondary-button" onClick={() => onUpdate(proposal.id, "approved")}>Tasdiqlash</button>
-                <button type="button" className="primary-button" onClick={() => onUpdate(proposal.id, "promoted")}>Global qilish</button>
-                <button type="button" className="icon-button" aria-label="Rad etish" onClick={() => onUpdate(proposal.id, "discarded")}><Trash2 size={16} /></button>
+                <button type="button" className="secondary-button" disabled={proposal.status === "testing" || proposal.status === "promoted"} onClick={() => onUpdate(proposal.id, "testing")}>{t("Sinash")}</button>
+                <button type="button" className="secondary-button" disabled={proposal.status !== "testing"} onClick={() => onUpdate(proposal.id, "approved")}>{t("Tasdiqlash")}</button>
+                <button type="button" className="primary-button" disabled={proposal.status !== "approved"} onClick={() => onUpdate(proposal.id, "promoted")}>{t("Global qilish")}</button>
+                <button type="button" className="icon-button" title={t("Rad etish")} aria-label={t("Rad etish")} disabled={proposal.status === "discarded" || proposal.status === "promoted"} onClick={() => onUpdate(proposal.id, "discarded")}><Trash2 size={16} /></button>
               </div>
             </div>
           )) : <EmptyState icon={FlaskConical} title="Staging bo'sh" text="Default proposal yo'q; staff authoring backend ulanganda takliflar shu yerga tushadi." />}
@@ -1089,6 +1228,7 @@ export function StaffWorkspace({ proposals, onAddProposal, onUpdate }: {
 }
 
 export function DeepAnalysis() {
+  const { t } = useI18n();
   const modules = [
     ["Landing/demo", "Demo request, multilingual marketing, waitlist endpoint, enterprise promise."],
     ["Auth/roles", "Phone +998 and password login, access/refresh token, user/staff/employee route guards."],
@@ -1111,6 +1251,10 @@ export function DeepAnalysis() {
     "Shartnoma template maydonlarini joylashtirish va render qilish",
     "Ikki versiyani taqqoslash va farq risklarini ko'rsatish",
   ];
+  const overview = [
+    "Kotib Legal kontrakt hayot siklini boshqaradigan AI SaaS. Asosiy ishlash prinsipi: hujjat qabul qilinadi, AI uni domen/sub-type bo'yicha klassifikatsiya qiladi, keyin shartnoma maydonlari, risklar va majburiyatlar strukturaga ajratiladi. Inson review bosqichida past confidence, noto'g'ri type, risk va owner masalalarini tasdiqlaydi.",
+    "Frontend route va API izlariga qaraganda tizim oddiy chat emas: kontrakt reyestri, majburiyat navbati, vazifa menejeri, kontragent/employee/department management, analytics, audit, branch/HQ konteksti va staff-only AI authoring modullaridan iborat.",
+  ];
   return (
     <section className="analysis-page">
       <PageIntro
@@ -1126,23 +1270,13 @@ export function DeepAnalysis() {
       />
       <Panel title="Kotib Legal bo'yicha chuqur kuzatuv" subtitle="Ommaviy sayt, frontend bundle nomlari, route/API izlari va UI matnlaridan chiqarilgan tahlil" icon={Brain}>
         <div className="analysis-copy">
-          <p>
-            Kotib Legal kontrakt hayot siklini boshqaradigan AI SaaS. Asosiy ishlash prinsipi:
-            hujjat qabul qilinadi, AI uni domen/sub-type bo'yicha klassifikatsiya qiladi, keyin shartnoma
-            maydonlari, risklar va majburiyatlar strukturaga ajratiladi. Inson review bosqichida past
-            confidence, noto'g'ri type, risk va owner masalalarini tasdiqlaydi.
-          </p>
-          <p>
-            Frontend route va API izlariga qaraganda tizim oddiy chat emas: kontrakt reyestri, majburiyat
-            navbati, vazifa menejeri, kontragent/employee/department management, analytics, audit, branch/HQ
-            konteksti va staff-only AI authoring modullaridan iborat.
-          </p>
+          {overview.map((paragraph) => <p key={paragraph}>{t(paragraph)}</p>)}
         </div>
         <div className="analysis-matrix">
           {modules.map(([title, desc]) => (
             <div key={title}>
-              <strong>{title}</strong>
-              <p>{desc}</p>
+              <strong>{t(title)}</strong>
+              <p>{t(desc)}</p>
             </div>
           ))}
         </div>
@@ -1152,7 +1286,7 @@ export function DeepAnalysis() {
           {operations.map((operation, index) => (
             <div className="operation" key={operation}>
               <span>{index + 1}</span>
-              <p>{operation}</p>
+              <p>{t(operation)}</p>
             </div>
           ))}
         </div>
@@ -1173,4 +1307,11 @@ export function DeepAnalysis() {
 
 function stageIndex(stage: AnalysisRun["stage"]) {
   return ["uploaded", "classifying", "extracting", "done"].indexOf(stage);
+}
+
+function jobToWorkspaceStage(job: AnalysisJob): AnalysisRun["stage"] {
+  if (job.status === "completed" || job.stage === "completed") return "done";
+  if (job.stage === "merging" || job.stage === "validating" || job.progress.completedChunks > 0) return "extracting";
+  if (job.stage === "analyzing") return "classifying";
+  return "uploaded";
 }

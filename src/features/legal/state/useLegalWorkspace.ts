@@ -39,6 +39,10 @@ export function useLegalWorkspace({ navigateTo }: UseLegalWorkspaceOptions) {
     selectedFile: null,
     run: null,
     progressStage: null,
+    analysisJobId: null,
+    analysisProgress: 0,
+    analysisMessage: "",
+    analysisChunks: { completed: 0, total: null },
     isAnalyzing: false,
     error: "",
   });

@@ -10,6 +10,12 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const rootDir = process.cwd();
   const threshold = Number(args.threshold || DEFAULT_THRESHOLD);
+  const requiredModel = args.model || null;
+  const requiredTransport = args.transport || null;
+  const maxProcessingMs = args["max-ms"] === undefined ? null : Number(args["max-ms"]);
+  if (maxProcessingMs !== null && (!Number.isFinite(maxProcessingMs) || maxProcessingMs <= 0)) {
+    throw new Error("--max-ms must be a positive number");
+  }
   const reportsDir = resolvePath(rootDir, args.reportsDir || "reports/evaluation");
   fs.mkdirSync(reportsDir, { recursive: true });
 
@@ -17,10 +23,12 @@ async function main() {
     ? [await evaluateSingleActual(rootDir, args)]
     : await evaluateCases(rootDir, args);
 
-  const aggregate = aggregateResults(results, threshold);
+  const requirements = { requiredModel, requiredTransport, maxProcessingMs };
+  const aggregate = aggregateResults(results, threshold, requirements);
   const report = {
     generatedAt: new Date().toISOString(),
     threshold,
+    requirements,
     aggregate,
     results,
   };
@@ -42,12 +50,17 @@ async function evaluateCases(rootDir, args) {
   }
 
   const results = [];
+  let auth = null;
   for (const testCase of cases) {
     const expectedPath = resolvePath(rootDir, testCase.expectedPath);
     const expected = readJson(expectedPath);
-    const actual = testCase.actualPath
-      ? readJson(resolvePath(rootDir, testCase.actualPath))
-      : await analyzePdf(apiBase, testCase.pdfPath);
+    let actual;
+    if (testCase.actualPath) {
+      actual = readJson(resolvePath(rootDir, testCase.actualPath));
+    } else {
+      auth ||= await authenticate(apiBase);
+      actual = await analyzePdf(apiBase, testCase.pdfPath, auth);
+    }
     results.push(evaluateActual({ id: testCase.id, title: testCase.title, expected, actual }));
   }
   return results;
@@ -86,7 +99,9 @@ function evaluateActual({ id, title, expected, actual }) {
     id,
     title,
     model: actual.model_used || null,
-    processingMs: actual.processing_ms || null,
+    transport: actual.transport_used || null,
+    processingMs: actual.processing_ms ?? null,
+    requestMs: actual.__evaluation_request_ms ?? null,
     overall: round(overall),
     sections,
   };
@@ -175,11 +190,12 @@ function bestMatch(expected, actualItems) {
   return best;
 }
 
-async function analyzePdf(apiBase, pdfPath) {
+async function analyzePdf(apiBase, pdfPath, auth) {
   if (!fs.existsSync(pdfPath)) {
     throw new Error(`PDF not found: ${pdfPath}. Run scripts/make-test-pdf.py first or update datasets/golden/cases.json`);
   }
-  const endpoint = apiBase.replace(/\/$/, "") + "/api/analyze-pdf";
+  const baseUrl = apiBase.replace(/\/$/, "");
+  const endpoint = baseUrl + "/api/analysis-jobs";
   const boundary = `----legalai-eval-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const fileBuffer = fs.readFileSync(pdfPath);
   const header = Buffer.from(
@@ -189,18 +205,70 @@ async function analyzePdf(apiBase, pdfPath) {
   );
   const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
   const body = Buffer.concat([header, fileBuffer, footer]);
+  const requestStartedAt = Date.now();
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": `multipart/form-data; boundary=${boundary}`,
       "Content-Length": String(body.length),
+      "Cookie": auth.cookie,
+      "User-Agent": auth.userAgent,
+      "X-CSRF-Token": auth.csrfToken,
+      "Idempotency-Key": `eval-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     },
     body,
   });
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${text.slice(0, 2000)}`);
+  const job = await readResponse(response, "Analysis job creation failed");
+  while (true) {
+    const statusResponse = await fetch(`${baseUrl}/api/analysis-jobs/${encodeURIComponent(job.id)}`, {
+      headers: {
+        "Cookie": auth.cookie,
+        "User-Agent": auth.userAgent,
+      },
+    });
+    const status = await readResponse(statusResponse, "Analysis job polling failed");
+    if (status.status === "completed" && status.result) {
+      return {
+        ...status.result,
+        __evaluation_request_ms: Date.now() - requestStartedAt,
+      };
+    }
+    if (status.status === "failed") {
+      throw new Error(`Analysis job failed (${status.error?.code || "unknown"}): ${status.error?.message || "unknown error"}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.max(500, Math.min(5_000, Number(status.pollAfterMs) || 1_000))));
   }
+}
+
+async function authenticate(apiBase) {
+  const baseUrl = apiBase.replace(/\/$/, "");
+  const userAgent = "LegalAI-Evaluator/1.0";
+  const username = process.env.LEGALAI_EVAL_USER || process.env.LEGALAI_ADMIN_USER || "admin";
+  const password = process.env.LEGALAI_EVAL_PASSWORD || process.env.LEGALAI_ADMIN_PASSWORD || "legal123";
+  const loginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "User-Agent": userAgent },
+    body: JSON.stringify({ username, password }),
+  });
+  const loginPayload = await readResponse(loginResponse, "Evaluator login failed");
+  const verifyResponse = await fetch(`${baseUrl}/api/auth/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "User-Agent": userAgent },
+    body: JSON.stringify({ challengeToken: loginPayload.challengeToken }),
+  });
+  const session = await readResponse(verifyResponse, "Evaluator verification failed");
+  const setCookie = typeof verifyResponse.headers.getSetCookie === "function"
+    ? verifyResponse.headers.getSetCookie()[0]
+    : verifyResponse.headers.get("set-cookie");
+  if (!setCookie || !session.csrfToken) {
+    throw new Error("Evaluator authentication did not return a session cookie and CSRF token");
+  }
+  return { cookie: setCookie.split(";")[0], csrfToken: session.csrfToken, userAgent };
+}
+
+async function readResponse(response, fallback) {
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${fallback} (${response.status}): ${text.slice(0, 1000)}`);
   return JSON.parse(text);
 }
 
@@ -218,12 +286,20 @@ function summarizeChecks(name, checks) {
   };
 }
 
-function aggregateResults(results, threshold) {
+function aggregateResults(results, threshold, requirements) {
   const overall = results.length ? results.reduce((sum, item) => sum + item.overall, 0) / results.length : 0;
+  const qualityPass = overall >= threshold;
+  const modelPass = !requirements.requiredModel || results.every((item) => normalize(item.model) === normalize(requirements.requiredModel));
+  const transportPass = !requirements.requiredTransport || results.every((item) => normalize(item.transport) === normalize(requirements.requiredTransport));
+  const latencyPass = requirements.maxProcessingMs === null || results.every((item) => Number.isFinite(item.processingMs) && item.processingMs <= requirements.maxProcessingMs);
   return {
     cases: results.length,
     overall: round(overall),
-    pass: overall >= threshold,
+    qualityPass,
+    modelPass,
+    transportPass,
+    latencyPass,
+    pass: qualityPass && modelPass && transportPass && latencyPass,
   };
 }
 
@@ -348,8 +424,9 @@ function parseArgs(argv) {
 function printSummary(report, outPath) {
   const pct = (value) => `${Math.round(value * 1000) / 10}%`;
   console.log(`ML evaluation: ${report.aggregate.pass ? "PASS" : "FAIL"} ${pct(report.aggregate.overall)} (${report.aggregate.cases} case)`);
+  console.log(`Gates: quality=${report.aggregate.qualityPass ? "PASS" : "FAIL"} model=${report.aggregate.modelPass ? "PASS" : "FAIL"} transport=${report.aggregate.transportPass ? "PASS" : "FAIL"} latency=${report.aggregate.latencyPass ? "PASS" : "FAIL"}`);
   for (const result of report.results) {
-    console.log(`- ${result.id}: ${pct(result.overall)} model=${result.model || "unknown"} ms=${result.processingMs || "n/a"}`);
+    console.log(`- ${result.id}: ${pct(result.overall)} model=${result.model || "unknown"} transport=${result.transport || "unknown"} processingMs=${result.processingMs ?? "n/a"} requestMs=${result.requestMs ?? "n/a"}`);
     for (const [name, section] of Object.entries(result.sections)) {
       console.log(`  ${name}: ${pct(section.score)} (${section.passed}/${section.total})`);
     }

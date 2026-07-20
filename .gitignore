@@ -10,3 +10,5 @@ vite.config.d.ts
 big-quanta-469517-h6-55280c39d520.json
 knowledge/uploads/
 reports/evaluation/*.json
+tmp/
+output/

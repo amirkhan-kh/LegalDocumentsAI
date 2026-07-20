@@ -10,7 +10,7 @@ export function createKnowledgeService(config) {
     if (!config.project) {
       throw new Error("Google Cloud project_id topilmadi. Credential JSON yoki GOOGLE_CLOUD_PROJECT ni tekshiring.");
     }
-    if (!fs.existsSync(config.credentialPath)) {
+    if (config.credentialPath && !fs.existsSync(config.credentialPath)) {
       throw new Error(`Google credential JSON topilmadi: ${config.credentialPath}`);
     }
     if (!client) {

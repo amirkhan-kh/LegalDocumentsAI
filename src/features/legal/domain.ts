@@ -16,11 +16,12 @@ import type {
 
 export const employees = ["Aziza R.", "Bekzod N.", "Dilshod K.", "Malika S.", "Samandar T."];
 
-export function fmtDate(value: string) {
+export function fmtDate(value: string, language = "uz") {
   if (!value) return "Muddat yo'q";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("uz-UZ", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+  const locale = language === "ru" ? "ru-RU" : language === "en" ? "en-US" : "uz-Latn-UZ";
+  return new Intl.DateTimeFormat(locale, { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
 export function daysUntil(value: string) {

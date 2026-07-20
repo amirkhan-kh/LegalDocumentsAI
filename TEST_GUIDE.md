@@ -15,8 +15,10 @@ npm run dev
 Brauzer:
 
 ```text
-http://localhost:5174/dashboard
+http://localhost:5174/login
 ```
+
+`admin` / `legal123` bilan kiring, xavfsizlik siyosatini tasdiqlang va ishchi sessiyani boshlang.
 
 Health:
 
@@ -28,8 +30,17 @@ Kutiladi:
 
 - `ok: true`
 - `pdfOnly: true`
+- `maxPdfBytes: 52428800`
+- `authRequired: true`
 - `languages: ["uz", "ru", "en"]`
-- `activeModel` PDF tahlildan keyin `gemini-3.5-flash` yoki fallback model bo'ladi.
+- `vertex.models: ["gemini-2.5-pro"]`
+- `vertex.timeoutSeconds: 60`
+- `vertex.proThinkingBudget: 128`
+- `vertex.runtime.gcsConfigured: true`
+- `vertex.runtime.gcsAvailable: true`
+- `vertex.runtime.inlineFallbackEnabled: false`
+- `vertex.activeModel` PDF tahlildan keyin `gemini-2.5-pro` bo'ladi.
+- `vertex.activeTransport` PDF tahlildan keyin `gcs` bo'ladi.
 
 ## 2. Routing tekshiruvi
 
@@ -43,6 +54,7 @@ Har bir route alohida ochilishi kerak:
 /vazifalar
 /taqqoslash
 /shablonlar
+/bilim-bazasi
 /analytics
 /staff-lab
 /kotib-tahlili
@@ -50,14 +62,16 @@ Har bir route alohida ochilishi kerak:
 
 Refresh qilinganda shu sahifa qayta ochilishi kerak. Sidebar bosilganda URL o'zgarishi kerak.
 
+Sidebar toggle orqali keng va ixcham holatlarni, mobil o'lchamda drawer menyuni tekshiring. `UZ`, `RU`, `EN` tugmalari login hamda workspace matnlarini almashtirishi kerak.
+
 ## 3. AI tahlil
 
 1. `/ai-tahlil` sahifasiga o'ting.
 2. `LegalAI_Full_System_Test_Contract.pdf` faylini tanlang.
 3. `PDF tahlilni boshlash` tugmasini bosing.
 4. Tahlil natijasida quyidagilar chiqishini tekshiring:
-   - model nomi;
-   - processing seconds;
+   - model nomi `gemini-2.5-pro`;
+   - `processing_ms <= 60000`;
    - language `MIXED`;
    - contract class/type;
    - fields;
@@ -76,6 +90,10 @@ OVERDUE-ISO-CERTIFICATE
 TEMPLATE-FIELD-LIBRARY-COMPLETE
 STAFF-LAB-AUTHORING-PROPOSAL
 ```
+
+PDF upload limiti **50 MiB inclusive** (`52,428,800` byte): aynan limitdagi haqiqiy PDF qabul qilinishi, `52,428,801` byte fayl esa HTTP `413` hamda `LIMIT_FILE_SIZE` yoki `PDF_TOO_LARGE` kodi qaytarishi kerak. `.pdf` nomli oddiy text yoki EOF'i uzilgan fayl HTTP `400` va `INVALID_PDF` qaytarishi kerak.
+
+Tahlil paytida health'dagi `vertex.runtime.activeAnalyses` oshadi. Tugagach `vertex.activeTransport: "gcs"` va bucket'ning `temporary/` prefiksida ushbu so'rovdan qolgan object yo'qligini tekshiring. GCS ishlamasa inline fallback faqat compatibility rejimi hisoblanadi.
 
 ## 4. Saqlashdan keyingi tekshiruv
 
@@ -152,13 +170,18 @@ Kutiladi:
 ```bash
 npm run build
 npm audit --audit-level=moderate
-curl -F "pdf=@/Users/amirxon/Desktop/LegalAI_Full_System_Test_Contract.pdf;type=application/pdf" \
-  http://localhost:5174/api/analyze-pdf
+npm run eval:ml
 ```
 
 Kutiladi:
 
 - HTTP 200;
+- evaluator `quality`, `model`, `transport`, `latency` gate'lari `PASS`;
+- `model=gemini-2.5-pro`;
+- `transport=gcs`;
+- `processingMs <= 60000`;
 - `document_class: contract`;
 - `language: mixed`;
 - fields, risks, obligations, review_queue, alerts qaytadi.
+
+`60 s` hard timeout muvaffaqiyatli tahlilning PayGo latency kafolati emas. Testni turli hajm, sahifa soni va scanned PDF'lar bilan takrorlab p50/p95 o'lchang; evaluator reportlari `reports/evaluation/` ichida sifat, model, server processing va API request vaqtini saqlaydi.

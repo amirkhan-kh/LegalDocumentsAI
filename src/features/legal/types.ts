@@ -142,6 +142,12 @@ export type LegalSummary = {
 export type ApiLegalAnalysis = {
   id: string;
   model_used?: string;
+  transport_used?: "gcs" | "inline" | "unknown";
+  timing?: {
+    staging_ms: number;
+    model_ms: number;
+    total_ms: number;
+  } | null;
   processing_ms: number;
   document: {
     title: string;
@@ -196,6 +202,10 @@ export type ReviewWorkspaceState = {
   selectedFile: File | null;
   run: AnalysisRun | null;
   progressStage: AnalysisRun["stage"] | null;
+  analysisJobId: string | null;
+  analysisProgress: number;
+  analysisMessage: string;
+  analysisChunks: { completed: number; total: number | null };
   isAnalyzing: boolean;
   error: string;
 };

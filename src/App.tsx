@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "./app/AppShell";
 import { labelForSection, routeBySection, sectionByRoute, sectionFromPath } from "./app/navigation";
+import { useAuth } from "./features/auth/AuthBoundary";
 import { LegalWorkspaceRouter } from "./features/legal/LegalWorkspaceRouter";
 import { useLegalWorkspace } from "./features/legal/state/useLegalWorkspace";
 import type { Section } from "./features/legal/types";
 
 function App() {
+  const { session, logout } = useAuth();
   const [active, setActive] = useState<Section>(() => sectionFromPath(window.location.pathname));
 
   useEffect(() => {
@@ -35,9 +37,11 @@ function App() {
       aiQueueCount={workspace.aiQueueCount}
       globalSearch={workspace.globalSearch}
       globalMatches={workspace.globalMatches}
+      user={session.user}
       onSearchChange={workspace.setGlobalSearch}
       onOpenSearchMatch={workspace.openSearchMatch}
       onNavigate={navigateTo}
+      onLogout={logout}
     >
       <LegalWorkspaceRouter active={active} workspace={workspace} onNavigate={navigateTo} />
     </AppShell>

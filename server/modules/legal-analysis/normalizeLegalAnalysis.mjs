@@ -1,6 +1,6 @@
 export function normalizeAnalysis(raw, fileName, startedAt, modelUsed = "") {
   const doc = raw.document || {};
-  const fields = ensureArray(raw.fields).map((field, index) => ({
+  const extractedFields = ensureArray(raw.fields).map((field, index) => ({
     id: String(field.id || `F-${index + 1}`),
     label: String(field.label || "Maydon"),
     value: String(field.value || ""),
@@ -41,13 +41,15 @@ export function normalizeAnalysis(raw, fileName, startedAt, modelUsed = "") {
     reason: String(item.reason || ""),
     priority: toPriority(item.priority),
   }));
-  const alerts = ensureArray(raw.alerts).map((alert) => ({
+  const extractedAlerts = ensureArray(raw.alerts).map((alert) => ({
     title: String(alert.title || ""),
     trigger: String(alert.trigger || ""),
     recommended_owner_role: String(alert.recommended_owner_role || ""),
     days_before: Number.isFinite(Number(alert.days_before)) ? Number(alert.days_before) : 0,
     source: String(alert.source || ""),
   }));
+  const fields = addDocumentFields(extractedFields, doc, [...risks, ...obligations]);
+  const alerts = addObligationAlerts(extractedAlerts, obligations);
   const riskLevel = toSeverity(doc.risk_level || (risks.some((risk) => risk.severity === "high") ? "high" : risks.length ? "medium" : "low"));
   const score = Number.isFinite(Number(doc.ai_score))
     ? Math.max(0, Math.min(100, Math.round(Number(doc.ai_score))))
@@ -56,6 +58,8 @@ export function normalizeAnalysis(raw, fileName, startedAt, modelUsed = "") {
   return {
     id: `RUN-${Date.now()}`,
     model_used: raw.__model_used || modelUsed,
+    transport_used: raw.__transport || "unknown",
+    timing: raw.__timing || null,
     processing_ms: Date.now() - startedAt,
     document: {
       title: String(doc.title || fileName.replace(/\.pdf$/i, "")),
@@ -89,6 +93,66 @@ export function normalizeAnalysis(raw, fileName, startedAt, modelUsed = "") {
 
 function ensureArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function addDocumentFields(fields, document, evidenceItems) {
+  const definitions = [
+    { id: "f_effective_date", label: "Kuchga kirish sanasi", value: document.effective_date },
+    { id: "f_end_date", label: "Dastlabki muddat tugash sanasi", value: document.end_date },
+  ];
+  const nextFields = [...fields];
+  for (const definition of definitions) {
+    const value = String(definition.value || "").trim();
+    if (!value || nextFields.some((field) => normalizeText(field.value) === normalizeText(value))) continue;
+    const evidence = evidenceItems.find((item) => normalizeText(JSON.stringify(item)).includes(normalizeText(value)));
+    nextFields.push({
+      id: definition.id,
+      label: definition.label,
+      value,
+      confidence: toConfidence(document.ai_score || 85),
+      page_number: evidence?.page_number ?? null,
+      source: String(evidence?.source || "Document summary"),
+      needs_review: !evidence,
+    });
+  }
+  return nextFields;
+}
+
+function addObligationAlerts(alerts, obligations) {
+  const nextAlerts = [...alerts];
+  for (const obligation of obligations) {
+    const trigger = String(obligation.due_date || obligation.deadline_text || "").trim();
+    if (!trigger) continue;
+    const normalizedSource = normalizeText(obligation.source);
+    const normalizedTitle = normalizeText(obligation.title);
+    const alreadyCovered = nextAlerts.some((alert) => {
+      const alertText = normalizeText(`${alert.title} ${alert.trigger} ${alert.source}`);
+      return (normalizedSource && alertText.includes(normalizedSource.slice(0, 42))) || significantWords(normalizedTitle).filter((word) => alertText.includes(word)).length >= 2;
+    });
+    if (alreadyCovered) continue;
+    nextAlerts.push({
+      title: `${obligation.title} muddati`,
+      trigger,
+      recommended_owner_role: obligation.owner_role,
+      days_before: reminderDays(obligation.category),
+      source: obligation.source,
+    });
+  }
+  return nextAlerts;
+}
+
+function reminderDays(category) {
+  if (category === "Renewal" || category === "Termination") return 30;
+  if (category === "Compliance") return 14;
+  return 7;
+}
+
+function significantWords(value) {
+  return normalizeText(value).split(" ").filter((word) => word.length >= 5);
+}
+
+function normalizeText(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9а-яё]+/gi, " ").trim();
 }
 
 function toConfidence(value) {

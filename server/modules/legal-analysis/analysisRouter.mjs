@@ -10,5 +10,14 @@ export function createAnalysisRouter({ upload, analysisController }) {
     });
   });
 
+  router.post("/analysis-jobs", (req, res, next) => {
+    upload.single("pdf")(req, res, (error) => {
+      if (error) return next(error);
+      return analysisController.createJob(req, res, next);
+    });
+  });
+
+  router.get("/analysis-jobs/:id", analysisController.getJob);
+
   return router;
 }

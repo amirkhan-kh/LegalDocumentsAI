@@ -7,17 +7,20 @@
     "dev": "node server.mjs",
     "client": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
-    "eval:ml": "node scripts/evaluate-analysis.mjs --cases datasets/golden/cases.json --api http://localhost:5174",
+    "eval:ml": "node scripts/evaluate-analysis.mjs --cases datasets/golden/cases.json --api http://localhost:5174 --model gemini-2.5-pro --transport gcs --max-ms 60000",
     "eval:ml:actual": "node scripts/evaluate-analysis.mjs --expected datasets/golden/legalai-full-system-test.expected.json --actual /tmp/legalai-pro-check-fixed.json",
     "start": "NODE_ENV=production node server.mjs",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "@google-cloud/storage": "^7.21.0",
     "@google/genai": "^2.10.0",
     "@vitejs/plugin-react": "^4.7.0",
     "express": "^5.2.1",
     "lucide-react": "^0.468.0",
     "multer": "^2.2.0",
+    "pdf-lib": "^1.17.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "typescript": "^5.8.3",
@@ -26,5 +29,8 @@
   "devDependencies": {
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }
