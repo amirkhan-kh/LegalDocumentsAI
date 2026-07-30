@@ -38,6 +38,7 @@ function App() {
       globalSearch={workspace.globalSearch}
       globalMatches={workspace.globalMatches}
       user={session.user}
+      organization={session.organization}
       onSearchChange={workspace.setGlobalSearch}
       onOpenSearchMatch={workspace.openSearchMatch}
       onNavigate={navigateTo}

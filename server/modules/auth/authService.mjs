@@ -1,15 +1,23 @@
 import crypto from "node:crypto";
+import path from "node:path";
+import { createSaasStore } from "../saas/store.mjs";
+import { listPublicPlans, getInternalCostAudit, TRIAL_DAYS } from "../saas/plans.mjs";
 
-export function createAuthService({ auth, isProduction }) {
-  const passwordSalt = crypto.randomBytes(24);
-  const expectedPasswordHash = hashPassword(auth.password, passwordSalt);
+export function createAuthService({ auth, isProduction, rootDir }) {
+  const dataDir = path.join(rootDir || process.cwd(), "data");
+  const store = createSaasStore({
+    dataDir,
+    adminUsername: auth.username,
+    adminPassword: auth.password,
+  });
+  store.ensureLoaded();
+
   const challenges = new Map();
   const sessions = new Map();
   const attempts = new Map();
 
   function startLogin({ username, password, ip, userAgent }) {
     cleanup();
-    const normalizedUsername = String(username || "").trim().toLowerCase();
     const attemptKey = String(ip || "unknown");
     const attempt = attempts.get(attemptKey);
     if (attempt?.lockedUntil && attempt.lockedUntil > Date.now()) {
@@ -21,9 +29,8 @@ export function createAuthService({ auth, isProduction }) {
       };
     }
 
-    const validUsername = safeTextEqual(normalizedUsername, auth.username.toLowerCase());
-    const validPassword = safeBufferEqual(hashPassword(String(password || ""), passwordSalt), expectedPasswordHash);
-    if (!validUsername || !validPassword) {
+    const result = store.authenticate(username, password);
+    if (!result) {
       const failure = recordFailure(attemptKey);
       return {
         ok: false,
@@ -36,11 +43,19 @@ export function createAuthService({ auth, isProduction }) {
       };
     }
 
+    if (!result.user.isSuperAdmin && result.org) {
+      const access = store.orgAccessAllowed(result.org);
+      if (!access.ok && access.reason === "org_suspended") {
+        return { ok: false, status: 403, error: "Tashkilot to'xtatilgan. Super admin bilan bog'laning." };
+      }
+    }
+
     attempts.delete(attemptKey);
     const challengeToken = randomToken();
     const expiresAt = Date.now() + auth.challengeTtlMs;
     challenges.set(challengeToken, {
-      username: auth.username,
+      userId: result.user.id,
+      orgId: result.org?.id || null,
       ip,
       userAgent,
       expiresAt,
@@ -50,7 +65,7 @@ export function createAuthService({ auth, isProduction }) {
       ok: true,
       challengeToken,
       expiresAt: new Date(expiresAt).toISOString(),
-      user: publicUser(auth.username),
+      user: store.publicUser(result.user, result.org, result.membership),
       security: {
         sessionMinutes: Math.round(auth.sessionTtlMs / 60_000),
         protectedApi: true,
@@ -71,11 +86,19 @@ export function createAuthService({ auth, isProduction }) {
     }
 
     challenges.delete(challengeToken);
+    const user = store.getUserById(challenge.userId);
+    if (!user || user.status === "disabled") {
+      return { ok: false, status: 401, error: "Foydalanuvchi topilmadi." };
+    }
+    const org = challenge.orgId ? store.getOrgById(challenge.orgId) : store.primaryOrgForUser(user);
+    const membership = org ? store.getMembership(user.id, org.id) : null;
+
     const sessionToken = randomToken();
     const csrfToken = randomToken();
     const expiresAt = Date.now() + auth.sessionTtlMs;
     sessions.set(sessionToken, {
-      username: challenge.username,
+      userId: user.id,
+      orgId: org?.id || null,
       csrfToken,
       userAgent,
       createdAt: Date.now(),
@@ -86,6 +109,36 @@ export function createAuthService({ auth, isProduction }) {
       ok: true,
       sessionToken,
       session: sessionPayload(sessions.get(sessionToken)),
+    };
+  }
+
+  function register({ email, password, fullName, organizationName, preferredPlan, ip, userAgent }) {
+    cleanup();
+    const result = store.register({ email, password, fullName, organizationName, preferredPlan });
+    if (!result.ok) return result;
+
+    const challengeToken = randomToken();
+    const expiresAt = Date.now() + auth.challengeTtlMs;
+    challenges.set(challengeToken, {
+      userId: result.user.id,
+      orgId: result.org.id,
+      ip,
+      userAgent,
+      expiresAt,
+    });
+
+    return {
+      ok: true,
+      challengeToken,
+      expiresAt: new Date(expiresAt).toISOString(),
+      user: store.publicUser(result.user, result.org, result.membership),
+      organization: store.orgSummaryForSession(result.org),
+      trialDays: TRIAL_DAYS,
+      security: {
+        sessionMinutes: Math.round(auth.sessionTtlMs / 60_000),
+        protectedApi: true,
+        httpOnlySession: true,
+      },
     };
   }
 
@@ -101,7 +154,12 @@ export function createAuthService({ auth, isProduction }) {
       sessions.delete(token);
       return null;
     }
-    return { token, value: session };
+    const user = store.getUserById(session.userId);
+    if (!user || user.status === "disabled") {
+      sessions.delete(token);
+      return null;
+    }
+    return { token, value: session, user };
   }
 
   function requireSession(req, res, next) {
@@ -112,12 +170,27 @@ export function createAuthService({ auth, isProduction }) {
     if (!isSafeMethod(req.method) && !safeTextEqual(String(req.get("x-csrf-token") || ""), current.value.csrfToken)) {
       return res.status(403).json({ error: "Xavfsizlik tokeni noto'g'ri. Sahifani yangilang." });
     }
+    const user = current.user;
+    const org = current.value.orgId ? store.getOrgById(current.value.orgId) : store.primaryOrgForUser(user);
+    const membership = org ? store.getMembership(user.id, org.id) : null;
     req.auth = {
       token: current.token,
-      user: publicUser(current.value.username),
+      user: store.publicUser(user, org, membership),
       csrfToken: current.value.csrfToken,
+      org,
+      isSuperAdmin: Boolean(user.isSuperAdmin),
+      store,
     };
     return next();
+  }
+
+  function requireSuperAdmin(req, res, next) {
+    requireSession(req, res, () => {
+      if (!req.auth?.isSuperAdmin) {
+        return res.status(403).json({ error: "Faqat super admin." });
+      }
+      return next();
+    });
   }
 
   function destroySession(req) {
@@ -135,10 +208,18 @@ export function createAuthService({ auth, isProduction }) {
   }
 
   function sessionPayload(session) {
+    const user = store.getUserById(session.userId);
+    if (!user) {
+      return null;
+    }
+    const org = session.orgId ? store.getOrgById(session.orgId) : store.primaryOrgForUser(user);
+    const membership = org ? store.getMembership(user.id, org.id) : null;
     return {
-      user: publicUser(session.username),
+      user: store.publicUser(user, org, membership),
       csrfToken: session.csrfToken,
       expiresAt: new Date(session.expiresAt).toISOString(),
+      organization: user.isSuperAdmin ? null : store.orgSummaryForSession(org),
+      trialDays: TRIAL_DAYS,
     };
   }
 
@@ -169,25 +250,39 @@ export function createAuthService({ auth, isProduction }) {
     }
   }
 
+  function assertCanAnalyze(req) {
+    if (req.auth?.isSuperAdmin) return { ok: true, reason: "super_admin" };
+    const org = req.auth?.org;
+    return store.canAnalyze(org);
+  }
+
+  function recordAnalysisUsage(req) {
+    if (req.auth?.isSuperAdmin) return null;
+    const orgId = req.auth?.org?.id;
+    return store.incrementAnalysis(orgId, 1);
+  }
+
   return {
     startLogin,
     completeLogin,
+    register,
     getSession,
     requireSession,
+    requireSuperAdmin,
     destroySession,
     sessionCookie,
     clearCookie,
     sessionPayload,
+    listPublicPlans,
+    getInternalCostAudit,
+    store,
+    assertCanAnalyze,
+    recordAnalysisUsage,
   };
 }
 
-function publicUser(username) {
-  return {
-    username,
-    displayName: "Legal Administrator",
-    role: "admin",
-    initials: "LA",
-  };
+function randomToken() {
+  return crypto.randomBytes(32).toString("hex");
 }
 
 function requestUserAgent(req) {
@@ -200,32 +295,18 @@ function readCookie(req, name) {
     const [key, ...value] = cookie.trim().split("=");
     if (key === name) return decodeURIComponent(value.join("="));
   }
-  return "";
-}
-
-function hashPassword(value, salt) {
-  return crypto.scryptSync(value, salt, 64);
-}
-
-function randomToken() {
-  return crypto.randomBytes(32).toString("base64url");
-}
-
-function safeBufferEqual(left, right) {
-  return left.length === right.length && crypto.timingSafeEqual(left, right);
-}
-
-function safeTextEqual(left, right) {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  const size = Math.max(leftBuffer.length, rightBuffer.length, 1);
-  const paddedLeft = Buffer.alloc(size);
-  const paddedRight = Buffer.alloc(size);
-  leftBuffer.copy(paddedLeft);
-  rightBuffer.copy(paddedRight);
-  return crypto.timingSafeEqual(paddedLeft, paddedRight) && leftBuffer.length === rightBuffer.length;
+  return null;
 }
 
 function isSafeMethod(method) {
   return method === "GET" || method === "HEAD" || method === "OPTIONS";
 }
+
+const safeText = {
+  equal(a, b) {
+    const left = Buffer.from(String(a || ""));
+    const right = Buffer.from(String(b || ""));
+    if (left.length !== right.length) return false;
+    return crypto.timingSafeEqual(left, right);
+  },
+};

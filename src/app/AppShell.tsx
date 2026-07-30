@@ -15,7 +15,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Badge, EmptyState } from "../components/ui";
-import type { AuthUser } from "../features/auth/types";
+import type { AuthUser, OrganizationSummary } from "../features/auth/types";
 import type { LegalMetrics, SearchMatch, Section } from "../features/legal/types";
 import { LanguageSwitcher, useI18n } from "./i18n";
 import { navItems, routeBySection } from "./navigation";
@@ -30,6 +30,7 @@ type AppShellProps = {
   globalSearch: string;
   globalMatches: SearchMatch[];
   user: AuthUser;
+  organization?: OrganizationSummary | null;
   onSearchChange: (value: string) => void;
   onOpenSearchMatch: (match: SearchMatch) => void;
   onNavigate: (section: Section) => void;
@@ -45,6 +46,7 @@ export function AppShell({
   globalSearch,
   globalMatches,
   user,
+  organization,
   onSearchChange,
   onOpenSearchMatch,
   onNavigate,
@@ -52,6 +54,13 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const { language, t } = useI18n();
+  const isSuperAdmin = Boolean(user.isSuperAdmin || user.role === "super_admin");
+  const trialEndsAt = organization?.trialEndsAt ? new Date(organization.trialEndsAt) : null;
+  const trialActive = organization?.status === "trial" && trialEndsAt && trialEndsAt.getTime() > Date.now();
+  const trialDaysLeft = trialActive
+    ? Math.max(0, Math.ceil((trialEndsAt!.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+    : 0;
+  const usage = organization?.usage;
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia("(max-width: 900px)").matches);
@@ -232,11 +241,25 @@ export function AppShell({
           <section className="sidebar-user-card">
             <span className="user-avatar">{user.initials}</span>
             <div className="sidebar-user-copy">
-              <small>{t("Xavfsiz sessiya")}</small>
+              <small>{isSuperAdmin ? t("Super Admin") : t("Xavfsiz sessiya")}</small>
               <strong>{user.displayName}</strong>
-              <span><i className="online-dot" /> {t("Faol")}</span>
+              <span><i className="online-dot" /> {organization?.name || t("Faol")}</span>
             </div>
           </section>
+
+          {isSuperAdmin ? (
+            <button
+              type="button"
+              className="logout-button sa-nav-button"
+              onClick={() => {
+                window.history.pushState({}, "", "/super-admin");
+                window.dispatchEvent(new Event("legalai:navigate"));
+              }}
+              title={t("Super Admin")}
+            >
+              <ShieldCheck size={18} /> <span>{t("Super Admin")}</span>
+            </button>
+          ) : null}
 
           <button type="button" className="logout-button" onClick={() => void logout()} disabled={isLoggingOut} title={t("Chiqish")}>
             <LogOut size={18} /> <span>{t("Chiqish")}</span>
@@ -245,6 +268,21 @@ export function AppShell({
       </aside>
 
       <main className="main">
+        {trialActive ? (
+          <div className="saas-trial-banner" role="status">
+            <strong>{t("Bepul sinov")}</strong>
+            <span>
+              {trialDaysLeft} {t("kun qoldi")}
+              {usage ? ` · ${usage.analyses}/${usage.limit} ${t("AI tahlil")}` : ""}
+            </span>
+          </div>
+        ) : null}
+        {organization?.status === "trial" && trialEndsAt && trialEndsAt.getTime() <= Date.now() ? (
+          <div className="saas-trial-banner is-expired" role="alert">
+            <strong>{t("Sinov muddati tugadi")}</strong>
+            <span>{t("Tarifni faollashtirish uchun bog'laning yoki super admin bilan aloqa qiling.")}</span>
+          </div>
+        ) : null}
         <header className="topbar">
           <div className="topbar-title">
             <button type="button" className="mobile-menu-button" onClick={() => setMobileOpen(true)} aria-label={t("Menyuni ochish")} aria-expanded={mobileOpen}>

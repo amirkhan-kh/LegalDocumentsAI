@@ -4,8 +4,8 @@ import { createKnowledgeUpload } from "./middleware/knowledgeUpload.mjs";
 import { createPdfUpload } from "./middleware/pdfUpload.mjs";
 import { createErrorHandler } from "./middleware/errorHandler.mjs";
 import { createSecurityHeaders } from "./middleware/securityHeaders.mjs";
-import { createAuthController } from "../modules/auth/authController.mjs";
-import { createAuthRouter } from "../modules/auth/authRouter.mjs";
+import { createAuthController, createSuperAdminController } from "../modules/auth/authController.mjs";
+import { createAuthRouter, createSuperAdminRouter } from "../modules/auth/authRouter.mjs";
 import { createAuthService } from "../modules/auth/authService.mjs";
 import { createHealthRouter } from "../modules/health/healthRouter.mjs";
 import { createAnalysisController } from "../modules/legal-analysis/analysisController.mjs";
@@ -23,10 +23,16 @@ export async function createHttpApp({ config, rootDir }) {
     console.warn(`[vertex] startup infrastructure check failed reason="${error?.message || error}"`);
   });
   const knowledgeService = createKnowledgeService(config);
-  const authService = createAuthService(config);
+  const authService = createAuthService({ ...config, rootDir });
   const authController = createAuthController({ authService });
+  const superAdminController = createSuperAdminController({ authService });
   const analysisJobService = createAnalysisJobService({ legalService, config });
-  const analysisController = createAnalysisController({ legalService, jobService: analysisJobService, maxPdfBytes: config.maxPdfBytes });
+  const analysisController = createAnalysisController({
+    legalService,
+    jobService: analysisJobService,
+    maxPdfBytes: config.maxPdfBytes,
+    authService,
+  });
   const knowledgeController = createKnowledgeController({ knowledgeService });
   const upload = createPdfUpload(config.maxPdfBytes);
   const knowledgeUpload = createKnowledgeUpload(config.maxKnowledgeBytes);
@@ -36,6 +42,10 @@ export async function createHttpApp({ config, rootDir }) {
   app.use(express.json({ limit: "1mb" }));
   app.use("/api/auth", createAuthRouter({ authController }));
   app.use("/api", createHealthRouter({ config, legalService, analysisJobService }));
+  app.use("/api/super-admin", createSuperAdminRouter({
+    superAdminController,
+    requireSuperAdmin: authService.requireSuperAdmin.bind(authService),
+  }));
   app.use("/api", authService.requireSession);
   app.use("/api", createKnowledgeRouter({ upload: knowledgeUpload, knowledgeController }));
   app.use("/api", createAnalysisRouter({ upload, analysisController }));

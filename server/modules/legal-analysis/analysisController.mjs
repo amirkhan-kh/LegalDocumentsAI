@@ -2,17 +2,31 @@ import { normalizeAnalysis } from "./normalizeLegalAnalysis.mjs";
 import { removeUploadedPdf, validatePdfFile } from "./pdfFileValidation.mjs";
 import { preparePdfForAnalysis } from "./preparePdfForAnalysis.mjs";
 
-export function createAnalysisController({ legalService, jobService, maxPdfBytes }) {
+export function createAnalysisController({ legalService, jobService, maxPdfBytes, authService }) {
   return {
-    analyzePdf: (req, res, next) => analyzePdf(req, res, next, legalService, maxPdfBytes),
-    createJob: (req, res, next) => createJob(req, res, next, jobService, maxPdfBytes),
+    analyzePdf: (req, res, next) => analyzePdf(req, res, next, legalService, maxPdfBytes, authService),
+    createJob: (req, res, next) => createJob(req, res, next, jobService, maxPdfBytes, authService),
     getJob: (req, res) => getJob(req, res, jobService),
   };
 }
 
-async function createJob(req, res, next, jobService, maxPdfBytes) {
+function quotaMessage(reason) {
+  if (reason === "trial_expired") return "Bepul sinov muddati tugadi. Tarifni faollashtirish uchun bog'laning.";
+  if (reason === "org_suspended") return "Tashkilot to'xtatilgan.";
+  if (reason === "analysis_quota_exceeded") return "Oylik AI tahlil limiti tugadi. Tarifni yangilang.";
+  if (reason === "org_inactive") return "Tashkilot faol emas.";
+  return "AI tahlil hozircha mavjud emas.";
+}
+
+async function createJob(req, res, next, jobService, maxPdfBytes, authService) {
   let handedOff = false;
   try {
+    if (authService) {
+      const quota = authService.assertCanAnalyze(req);
+      if (!quota.ok) {
+        return res.status(402).json({ error: quotaMessage(quota.reason), reason: quota.reason, used: quota.used, limit: quota.limit });
+      }
+    }
     if (!req.file) return res.status(400).json({ error: "PDF fayl yuborilmadi." });
     await validatePdfFile(req.file, maxPdfBytes);
     const { job, reused } = jobService.enqueue({
@@ -21,6 +35,8 @@ async function createJob(req, res, next, jobService, maxPdfBytes) {
       idempotencyKey: req.get("idempotency-key"),
     });
     handedOff = !reused;
+    // Count quota when a new analysis job is accepted (not on idempotent reuse).
+    if (!reused) authService?.recordAnalysisUsage(req);
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Location", `/api/analysis-jobs/${job.id}`);
     res.setHeader("Retry-After", String(Math.max(1, Math.ceil(job.pollAfterMs / 1000))));
@@ -44,7 +60,7 @@ function getJob(req, res, jobService) {
   return res.json(job);
 }
 
-async function analyzePdf(req, res, next, legalService, maxPdfBytes) {
+async function analyzePdf(req, res, next, legalService, maxPdfBytes, authService) {
   const abortController = new AbortController();
   let analysisFile = null;
   const abortRequest = () => abortController.abort();
@@ -53,6 +69,12 @@ async function analyzePdf(req, res, next, legalService, maxPdfBytes) {
     if (!res.writableEnded) abortRequest();
   });
   try {
+    if (authService) {
+      const quota = authService.assertCanAnalyze(req);
+      if (!quota.ok) {
+        return res.status(402).json({ error: quotaMessage(quota.reason), reason: quota.reason, used: quota.used, limit: quota.limit });
+      }
+    }
     if (!req.file) {
       return res.status(400).json({ error: "PDF fayl yuborilmadi." });
     }
@@ -63,6 +85,7 @@ async function analyzePdf(req, res, next, legalService, maxPdfBytes) {
     console.log(`[api] analyze start file="${req.file.originalname}" upload_size=${preparedPdf.uploadedBytes} analysis_size=${preparedPdf.analysisBytes} repacked=${preparedPdf.repacked}`);
     const result = await legalService.extractPdf(analysisFile, { signal: abortController.signal });
     const normalized = normalizeAnalysis(result, req.file.originalname, startedAt, legalService.getActiveModelName());
+    authService?.recordAnalysisUsage(req);
     console.log(`[api] analyze done file="${req.file.originalname}" model=${normalized.model_used} transport=${result.__transport || "unknown"} ms=${normalized.processing_ms}`);
     return res.json(normalized);
   } catch (error) {

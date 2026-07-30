@@ -12,3 +12,4 @@ knowledge/uploads/
 reports/evaluation/*.json
 tmp/
 output/
+data/
