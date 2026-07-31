@@ -272,13 +272,16 @@ function LoginPage({
               <p className="auth-subtitle">{t("LegalAI boshqaruv paneliga xavfsiz kirish.")}</p>
             </div>
             <label>
-              {t("Login")}
+              {t("Login yoki email")}
               <span className="auth-input">
                 <UserRound size={18} />
                 <input
+                  type="text"
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
                   autoComplete="username"
+                  inputMode="text"
+                  spellCheck={false}
                   autoFocus
                 />
               </span>
@@ -429,7 +432,7 @@ function RegisterPage({
   const submitRegister = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!email.trim() || !password || !organizationName.trim()) {
-      setError(t("Email, parol va tashkilot nomini to'ldiring."));
+      setError(t("Login, parol va tashkilot nomini to'ldiring."));
       return;
     }
     if (password.length < 8) {
@@ -513,14 +516,16 @@ function RegisterPage({
               </span>
             </label>
             <label>
-              {t("Email")}
+              {t("Login yoki email")}
               <span className="auth-input">
                 <Mail size={18} />
                 <input
-                  type="email"
+                  type="text"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  autoComplete="email"
+                  autoComplete="username"
+                  inputMode="text"
+                  spellCheck={false}
                 />
               </span>
             </label>

@@ -190,8 +190,12 @@ export function createSaasStore({ dataDir, adminUsername, adminPassword }) {
   function register({ email, password, fullName, organizationName, preferredPlan }) {
     const s = ensureLoaded();
     const login = String(email || "").trim().toLowerCase();
-    if (!login || !login.includes("@")) {
-      return { ok: false, status: 400, error: "To'g'ri email kiriting." };
+    // Login yoki email — "@" majburiy emas
+    if (!login || login.length < 2) {
+      return { ok: false, status: 400, error: "Login yoki email kiriting." };
+    }
+    if (/\s/.test(login)) {
+      return { ok: false, status: 400, error: "Login bo'shliqsiz bo'lishi kerak." };
     }
     if (!password || String(password).length < 8) {
       return { ok: false, status: 400, error: "Parol kamida 8 ta belgi bo'lishi kerak." };
@@ -201,17 +205,18 @@ export function createSaasStore({ dataDir, adminUsername, adminPassword }) {
       return { ok: false, status: 400, error: "Tashkilot nomini kiriting." };
     }
     if (findUserByLogin(login)) {
-      return { ok: false, status: 409, error: "Bu email allaqachon ro'yxatdan o'tgan." };
+      return { ok: false, status: 409, error: "Bu login allaqachon ro'yxatdan o'tgan." };
     }
 
     const plan = getPlanByCode(preferredPlan) || getPlanByCode("growth");
     const trialEnds = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const localPart = login.includes("@") ? login.split("@")[0] : login;
     const user = {
       id: newId(),
       username: login,
-      email: login,
+      email: login.includes("@") ? login : `${login}@legalai.local`,
       passwordHash: hashPassword(password),
-      fullName: String(fullName || "").trim() || login.split("@")[0],
+      fullName: String(fullName || "").trim() || localPart,
       isSuperAdmin: false,
       status: "active",
       createdAt: nowIso(),

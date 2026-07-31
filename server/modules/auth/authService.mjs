@@ -167,7 +167,7 @@ export function createAuthService({ auth, isProduction, rootDir }) {
     if (!current) {
       return res.status(401).json({ error: "Sessiya tugagan. Qayta kiring." });
     }
-    if (!isSafeMethod(req.method) && !safeTextEqual(String(req.get("x-csrf-token") || ""), current.value.csrfToken)) {
+    if (!isSafeMethod(req.method) && !safeText.equal(String(req.get("x-csrf-token") || ""), current.value.csrfToken)) {
       return res.status(403).json({ error: "Xavfsizlik tokeni noto'g'ri. Sahifani yangilang." });
     }
     const user = current.user;

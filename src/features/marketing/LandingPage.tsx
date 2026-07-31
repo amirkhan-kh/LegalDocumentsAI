@@ -124,135 +124,118 @@ function scrollToHash(hash: string) {
   el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-/** Lightweight paper deck: pure CSS, fixed footprint, dashboard-like sheets. */
+/**
+ * Legal document sheets — fixed size; compact copy that fully fits each card.
+ * Title bold/larger; body & meta smaller. No clipped text.
+ */
 function HeroPaperDeck({ t }: { t: (value: string) => string }) {
   return (
-    <div className="lp-deck" aria-hidden="true">
-      <div className="lp-deck-glow" />
-      <div className="lp-deck-spine" />
+    <div className="lp-fan" aria-hidden="true">
+      <div className="lp-fan-glow" />
 
-      {/* Base / back sheets — ambient depth */}
-      <div className="lp-sheet lp-sheet-base lp-sheet-d">
-        <div className="lp-sheet-chrome">
-          <span className="lp-sheet-dot" />
-          <span className="lp-sheet-dot" />
-          <span className="lp-sheet-dot" />
-          <em>{t("Analitika")}</em>
+      <article className="lp-note lp-note-5 doc-memo">
+        <p className="lp-doc-ref">REF-KB/12 · CONFIDENTIAL</p>
+        <h3 className="lp-doc-title">{t("Bilim bazasi")}</h3>
+        <div className="lp-doc-main">
+          <p className="lp-doc-sub">Internal policy pack</p>
+          <ol className="lp-doc-lines">
+            <li>1. Policy playbook</li>
+            <li>2. Approval matrix</li>
+            <li>3. CRM script</li>
+            <li>4. Risk checklist</li>
+          </ol>
         </div>
-        <div className="lp-sheet-bars">
-          <i style={{ height: "42%" }} />
-          <i style={{ height: "68%" }} />
-          <i style={{ height: "55%" }} />
-          <i style={{ height: "82%" }} />
-          <i style={{ height: "48%" }} />
-        </div>
-        <div className="lp-sheet-kpi-row">
-          <span>
-            <b>87</b>
-            <small>AI ball</small>
-          </span>
-          <span>
-            <b>3</b>
-            <small>{t("Yuqori risk")}</small>
-          </span>
-        </div>
-      </div>
+        <p className="lp-doc-sign">/s/ Legal Ops</p>
+      </article>
 
-      <div className="lp-sheet lp-sheet-c">
-        <div className="lp-sheet-chrome">
-          <span className="lp-live">
-            <i />
-            {t("Majburiyatlar")}
-          </span>
-          <strong>OBL-QUEUE</strong>
+      <article className="lp-note lp-note-4 doc-brief">
+        <p className="lp-doc-ref">BRIEF · AI SCORE</p>
+        <h3 className="lp-doc-title">{t("Analitika")}</h3>
+        <div className="lp-doc-main">
+          <div className="lp-doc-score-row">
+            <span>
+              AI ball <em>87</em>
+            </span>
+            <span>
+              {t("Yuqori risk")} <em>3</em>
+            </span>
+          </div>
+          <div className="lp-doc-bars" aria-hidden="true">
+            <i style={{ height: "40%" }} />
+            <i style={{ height: "68%" }} />
+            <i style={{ height: "52%" }} />
+            <i style={{ height: "86%" }} />
+            <i style={{ height: "44%" }} />
+          </div>
         </div>
-        <ul className="lp-sheet-queue">
-          <li>
-            <em className="is-red" />
-            <span>{t("To'lov muddati")}</span>
-            <b>15 {t("kun")}</b>
-          </li>
-          <li>
-            <em className="is-amber" />
-            <span>{t("Muddat")}</span>
-            <b>30 {t("kun")}</b>
-          </li>
-          <li>
-            <em className="is-green" />
-            <span>{t("Hisobot")}</span>
-            <b>OK</b>
-          </li>
-        </ul>
-      </div>
+        <p className="lp-doc-foot">Portfolio · Q3</p>
+      </article>
 
-      <div className="lp-sheet lp-sheet-b">
-        <div className="lp-sheet-chrome">
-          <span className="lp-live is-blue">
-            <i />
-            {t("Shartnomalar")}
-          </span>
-          <strong>REG-08</strong>
+      <article className="lp-note lp-note-3 doc-schedule">
+        <p className="lp-doc-ref">SCH-OBL · 12 items</p>
+        <h3 className="lp-doc-title">{t("Majburiyatlar")}</h3>
+        <div className="lp-doc-main">
+          <ul className="lp-doc-plain">
+            <li>
+              <span>§1</span> {t("To'lov")} — 15 {t("kun")}
+            </li>
+            <li>
+              <span>§2</span> {t("Muddat")} — 30 {t("kun")}
+            </li>
+            <li>
+              <span>§3</span> {t("Hisobot")} — OK
+            </li>
+            <li>
+              <span>§4</span> SLA — pending
+            </li>
+          </ul>
         </div>
-        <div className="lp-sheet-table">
-          <div>
-            <span>MSA-014</span>
-            <em className="tone-warn">{t("Yuqori")}</em>
-          </div>
-          <div>
-            <span>NDA-221</span>
-            <em className="tone-ok">{t("Past")}</em>
-          </div>
-          <div>
-            <span>SLA-09</span>
-            <em className="tone-mid">{t("O'rta")}</em>
-          </div>
-        </div>
-      </div>
+        <p className="lp-doc-sign">Schedule A</p>
+      </article>
 
-      {/* Front analysis card — primary peel */}
-      <div className="lp-sheet lp-sheet-a">
-        <div className="lp-sheet-chrome">
-          <span className="lp-live">
-            <i />
-            {t("Tahlil")}
-          </span>
-          <strong>MSA-2026-014</strong>
+      <article className="lp-note lp-note-2 doc-register">
+        <p className="lp-doc-ref">REGISTER · REG-08</p>
+        <h3 className="lp-doc-title">{t("Shartnomalar")}</h3>
+        <div className="lp-doc-main">
+          <table className="lp-doc-table">
+            <tbody>
+              <tr>
+                <td>MSA-014</td>
+                <td>{t("Yuqori")}</td>
+              </tr>
+              <tr>
+                <td>NDA-221</td>
+                <td>{t("Past")}</td>
+              </tr>
+              <tr>
+                <td>SLA-09</td>
+                <td>{t("O'rta")}</td>
+              </tr>
+              <tr>
+                <td>SOW-03</td>
+                <td>{t("O'rta")}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div className="lp-dossier-rows">
-          <div>
-            <span>{t("Tomonlar")}</span>
-            <strong>2</strong>
-          </div>
-          <div className="is-warn">
-            <span>{t("Risk")}</span>
-            <strong>{t("Yuqori")}</strong>
-          </div>
-          <div className="is-ok">
-            <span>{t("Majburiyat")}</span>
-            <strong>12</strong>
-          </div>
-        </div>
-        <ul className="lp-dossier-list">
-          <li>
-            <em />
-            {t("To'lov muddati 15 kun — diqqat talab qiladi")}
-          </li>
-          <li>
-            <em className="is-amber" />
-            {t("Bir tomonlama bekor qilish bandi")}
-          </li>
-          <li>
-            <em className="is-green" />
-            {t("Maxfiylik muddati aniq belgilangan")}
-          </li>
-        </ul>
-        <footer className="lp-sheet-foot">
-          <ShieldCheck size={13} />
-          <span>{t("Maxfiy ishlov · sessiya himoyasi")}</span>
-        </footer>
-      </div>
+        <p className="lp-doc-foot">Registry extract</p>
+      </article>
 
-      <div className="lp-deck-shadow" />
+      <article className="lp-note lp-note-1 doc-opinion">
+        <p className="lp-doc-ref">MSA-2026-014 · OPINION</p>
+        <h3 className="lp-doc-title">{t("Tahlil")}</h3>
+        <div className="lp-doc-main">
+          <p className="lp-doc-meta">
+            {t("Tomonlar")}: 2 · {t("Risk")}: {t("Yuqori")} · {t("Majburiyat")}: 12
+          </p>
+          <p className="lp-doc-body">{t("To'lov muddati 15 kun — diqqat talab qiladi")}.</p>
+          <p className="lp-doc-body">{t("Bir tomonlama bekor qilish bandi")}.</p>
+          <p className="lp-doc-body">{t("Maxfiylik muddati aniq belgilangan")}.</p>
+        </div>
+        <p className="lp-doc-sign">
+          <ShieldCheck size={10} /> {t("Maxfiy ishlov")}
+        </p>
+      </article>
     </div>
   );
 }
@@ -362,7 +345,6 @@ export function LandingPage({ session, onNavigate }: LandingPageProps) {
         <span className="lp-orb lp-orb-c" />
         <span className="lp-orb lp-orb-d" />
         <span className="lp-mesh" />
-        <span className="lp-grid" />
         <span className="lp-shine" />
       </div>
 
